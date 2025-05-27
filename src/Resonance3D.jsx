@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, Text, Grid } from "@react-three/drei";
+import { OrbitControls, Text } from "@react-three/drei";
 import { database } from "./firebase";
 import {
   ref,
@@ -196,7 +196,7 @@ export default function Resonance3D() {
         camera={{ position: [0, 5, 10], fov: 60 }}
         style={{ height: "100vh", background: "black" }}
       >
-        <fog attach="fog" args={["#000000", 5, 30]} />
+        {/* Fog removed */}
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
         <OrbitControls />
@@ -278,7 +278,7 @@ export default function Resonance3D() {
               fontFamily: "monospace",
               lineHeight: 1.4,
             }}
-                        onKeyDown={(e) => {
+            onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 handleSubmit();
@@ -293,7 +293,7 @@ export default function Resonance3D() {
             >
               Add
             </button>
-            <button
+                        <button
               onClick={() => setInputPos(null)}
               style={{ padding: "6px 14px" }}
             >
@@ -306,3 +306,4 @@ export default function Resonance3D() {
   );
 }
 
+             
