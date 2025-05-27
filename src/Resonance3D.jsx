@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Text } from "@react-three/drei";
 import { database } from "./firebase";
@@ -11,17 +11,16 @@ import {
   limitToLast
 } from "firebase/database";
 
-// --- Ripple component (text facing camera) ---
+// Ripple component: text faces camera once, no animation
 function Ripple({ id, text, position, onDelete }) {
   const ref = useRef();
   const { camera } = useThree();
 
-  useFrame(({ clock }) => {
+  useEffect(() => {
     if (ref.current) {
-      ref.current.position.y = position[1] + Math.sin(clock.getElapsedTime() + position[0]) * 0.1;
       ref.current.lookAt(camera.position);
     }
-  });
+  }, [camera]);
 
   return (
     <group position={position}>
@@ -42,22 +41,40 @@ function Ripple({ id, text, position, onDelete }) {
   );
 }
 
-// --- Procedural Object component ---
-function ProceduralObject({ position, color }) {
+// Procedural object component (simple colored box)
+function ProceduralObject({ position, color, shape = "box" }) {
   const ref = useRef();
   const { camera } = useThree();
 
-  useFrame(({ clock }) => {
+  useFrame(() => {
     if (ref.current) {
-      // simple floating animation
-      ref.current.position.y = position[1] + Math.sin(clock.getElapsedTime()) * 0.2;
+      // Optional: float animation if you want, or remove to keep fixed
+      // ref.current.position.y = position[1] + Math.sin(clock.getElapsedTime()) * 0.2;
       ref.current.lookAt(camera.position);
     }
   });
 
+  let geometry;
+  switch (shape.toLowerCase()) {
+    case "sphere":
+      geometry = <sphereGeometry args={[0.75, 32, 32]} />;
+      break;
+    case "cone":
+      geometry = <coneGeometry args={[0.7, 1.2, 32]} />;
+      break;
+    case "cylinder":
+      geometry = <cylinderGeometry args={[0.5, 0.5, 1.2, 32]} />;
+      break;
+    case "torus":
+      geometry = <torusGeometry args={[0.5, 0.2, 16, 100]} />;
+      break;
+    default:
+      geometry = <boxGeometry args={[1, 1, 1]} />;
+  }
+
   return (
     <mesh position={position} ref={ref} castShadow>
-      <boxGeometry args={[1, 1, 1]} />
+      {geometry}
       <meshStandardMaterial color={color} />
     </mesh>
   );
@@ -71,7 +88,7 @@ export default function Resonance3D() {
   const [mode, setMode] = useState("text"); // "text" or "object"
 
   // Load ripples from Firebase
-  React.useEffect(() => {
+  useEffect(() => {
     const ripplesRef = query(ref(database, "ripples"), limitToLast(100));
     const unsubscribe = onValue(ripplesRef, (snapshot) => {
       const data = snapshot.val() || {};
@@ -100,29 +117,32 @@ export default function Resonance3D() {
     remove(rippleRef);
   };
 
-  // Procedural object generator (simple example)
+  // Procedural object generation from prompt
   const generateObjectsFromPrompt = (prompt, position) => {
-    // Basic example: generate a colored cube or sphere based on keywords
-    const newObjects = [];
-    if (prompt.toLowerCase().includes("red")) {
-      newObjects.push({ position, color: "red" });
-    } else if (prompt.toLowerCase().includes("blue")) {
-      newObjects.push({ position, color: "blue" });
-    } else {
-      newObjects.push({ position, color: "gray" });
-    }
-    setObjects((objs) => [...objs, ...newObjects]);
+    let color = "gray";
+    if (prompt.toLowerCase().includes("red")) color = "red";
+    else if (prompt.toLowerCase().includes("blue")) color = "blue";
+    else if (prompt.toLowerCase().includes("green")) color = "green";
+
+    let shape = "box";
+    if (prompt.toLowerCase().includes("sphere")) shape = "sphere";
+    else if (prompt.toLowerCase().includes("cone")) shape = "cone";
+    else if (prompt.toLowerCase().includes("cylinder")) shape = "cylinder";
+    else if (prompt.toLowerCase().includes("torus")) shape = "torus";
+
+    const newObject = { position, color, shape };
+    setObjects((objs) => [...objs, newObject]);
     setInputPos(null);
     setInput("");
   };
 
-  // Handle canvas click to set input position
+  // Handle canvas click for input position
   const handleCanvasClick = (event) => {
     event.stopPropagation();
     setInputPos([event.point.x, event.point.y + 0.5, event.point.z]);
   };
 
-  // Handle form submit based on mode
+  // Submit handler based on mode
   const handleSubmit = () => {
     if (mode === "text") {
       addRipple();
@@ -133,7 +153,7 @@ export default function Resonance3D() {
 
   return (
     <>
-      {/* Mode toggle button */}
+      {/* Mode toggle */}
       <div style={{ position: "fixed", top: 20, left: 20, zIndex: 20 }}>
         <button
           onClick={() => setMode(mode === "text" ? "object" : "text")}
@@ -161,7 +181,6 @@ export default function Resonance3D() {
           <meshBasicMaterial transparent opacity={0} />
         </mesh>
 
-        {/* Render text ripples */}
         {ripples.map(({ id, text, position }) => (
           <Ripple
             key={id}
@@ -172,13 +191,16 @@ export default function Resonance3D() {
           />
         ))}
 
-        {/* Render procedural objects */}
-        {objects.map(({ position, color }, i) => (
-          <ProceduralObject key={i} position={position} color={color} />
+        {objects.map(({ position, color, shape }, i) => (
+          <ProceduralObject
+            key={i}
+            position={position}
+            color={color}
+            shape={shape}
+          />
         ))}
       </Canvas>
 
-      {/* Input area */}
       {inputPos && (
         <div
           style={{
@@ -191,7 +213,7 @@ export default function Resonance3D() {
             zIndex: 30,
             width: 400,
             maxWidth: "80vw",
-            boxShadow: "0 0 15px rgba(255,255,255,0.1)"
+            boxShadow: "0 0 15px rgba(255,255,255,0.1)",
           }}
         >
           <textarea
@@ -214,7 +236,7 @@ export default function Resonance3D() {
               color: "white",
               resize: "vertical",
               fontFamily: "monospace",
-              lineHeight: 1.4
+              lineHeight: 1.4,
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
