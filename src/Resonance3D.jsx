@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, Text } from "@react-three/drei";
+import { OrbitControls, Text, Grid } from "@react-three/drei";
 import { database } from "./firebase";
 import {
   ref,
@@ -11,7 +11,7 @@ import {
   limitToLast
 } from "firebase/database";
 
-// Ripple component: text faces camera once, no animation
+// Ripple component: text faces camera once, fixed position
 function Ripple({ id, text, position, onDelete }) {
   const ref = useRef();
   const { camera } = useThree();
@@ -41,15 +41,13 @@ function Ripple({ id, text, position, onDelete }) {
   );
 }
 
-// Procedural object component (simple colored box)
+// Procedural object component (supports multiple shapes)
 function ProceduralObject({ position, color, shape = "box" }) {
   const ref = useRef();
   const { camera } = useThree();
 
   useFrame(() => {
     if (ref.current) {
-      // Optional: float animation if you want, or remove to keep fixed
-      // ref.current.position.y = position[1] + Math.sin(clock.getElapsedTime()) * 0.2;
       ref.current.lookAt(camera.position);
     }
   });
@@ -77,6 +75,28 @@ function ProceduralObject({ position, color, shape = "box" }) {
       {geometry}
       <meshStandardMaterial color={color} />
     </mesh>
+  );
+}
+
+// Volumetric dot grid helper
+function DotGrid({ size = 10, spacing = 2 }) {
+  const dots = [];
+  for (let x = -size; x <= size; x += spacing) {
+    for (let y = -size; y <= size; y += spacing) {
+      for (let z = -size; z <= size; z += spacing) {
+        dots.push([x, y, z]);
+      }
+    }
+  }
+  return (
+    <>
+      {dots.map((pos, i) => (
+        <mesh key={i} position={pos}>
+          <sphereGeometry args={[0.05, 8, 8]} />
+          <meshBasicMaterial color="#555" opacity={0.15} transparent />
+        </mesh>
+      ))}
+    </>
   );
 }
 
@@ -136,10 +156,18 @@ export default function Resonance3D() {
     setInput("");
   };
 
-  // Handle canvas click for input position
+  // Updated click handler with default placement 5 units in front if no hit
   const handleCanvasClick = (event) => {
     event.stopPropagation();
-    setInputPos([event.point.x, event.point.y + 0.5, event.point.z]);
+
+    if (event.intersections.length > 0) {
+      setInputPos(event.intersections[0].point.toArray());
+    } else {
+      const { camera, raycaster } = event;
+      const direction = raycaster.ray.direction.clone().normalize();
+      const position = camera.position.clone().add(direction.multiplyScalar(5));
+      setInputPos(position.toArray());
+    }
   };
 
   // Submit handler based on mode
@@ -168,9 +196,18 @@ export default function Resonance3D() {
         camera={{ position: [0, 5, 10], fov: 60 }}
         style={{ height: "100vh", background: "black" }}
       >
+        <fog attach="fog" args={["#000000", 5, 30]} />
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
         <OrbitControls />
+
+        {/* Axes helper */}
+        <axesHelper args={[5]} />
+
+        {/* Volumetric dot grid */}
+        <DotGrid size={10} spacing={2} />
+
+        {/* Invisible plane for clicks */}
         <mesh
           rotation={[-Math.PI / 2, 0, 0]}
           position={[0, 0, 0]}
@@ -181,6 +218,7 @@ export default function Resonance3D() {
           <meshBasicMaterial transparent opacity={0} />
         </mesh>
 
+        {/* Render text ripples */}
         {ripples.map(({ id, text, position }) => (
           <Ripple
             key={id}
@@ -191,6 +229,7 @@ export default function Resonance3D() {
           />
         ))}
 
+        {/* Render procedural objects */}
         {objects.map(({ position, color, shape }, i) => (
           <ProceduralObject
             key={i}
@@ -201,6 +240,7 @@ export default function Resonance3D() {
         ))}
       </Canvas>
 
+      {/* Input UI */}
       {inputPos && (
         <div
           style={{
