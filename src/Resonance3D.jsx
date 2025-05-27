@@ -1,8 +1,17 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Text } from "@react-three/drei";
+import { database } from "./firebase";
+import {
+  ref,
+  onValue,
+  push,
+  remove,
+  query,
+  limitToLast
+} from "firebase/database";
 
-function Ripple({ text, position, onDelete }) {
+function Ripple({ id, text, position, onDelete }) {
   const ref = useRef();
   useFrame(({ clock }) => {
     ref.current.position.y = position[1] + Math.sin(clock.getElapsedTime() + position[0]) * 0.1;
@@ -18,7 +27,7 @@ function Ripple({ text, position, onDelete }) {
         anchorY="middle"
         maxWidth={4}
         lineHeight={1}
-        onClick={onDelete}
+        onClick={() => onDelete(id)}
         style={{ cursor: "pointer" }}
       >
         {text}
@@ -47,20 +56,40 @@ export default function Resonance3D() {
   const [input, setInput] = useState("");
   const [inputPos, setInputPos] = useState(null);
 
-  const handleCanvasClick = (event) => {
-    event.stopPropagation();
-    setInputPos([event.point.x, event.point.y + 0.5, event.point.z]);
-  };
+  useEffect(() => {
+    const ripplesRef = query(ref(database, "ripples"), limitToLast(100));
+
+    const unsubscribe = onValue(ripplesRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const loadedRipples = Object.entries(data).map(([id, ripple]) => ({
+        id,
+        text: ripple.text,
+        position: ripple.position
+      }));
+      setRipples(loadedRipples);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const addRipple = () => {
-    if (!input.trim()) return;
-    setRipples([...ripples, { id: Date.now(), text: input, position: inputPos }]);
+    if (!input.trim() || !inputPos) return;
+
+    const ripplesRef = ref(database, "ripples");
+    push(ripplesRef, { text: input, position: inputPos });
+
     setInput("");
     setInputPos(null);
   };
 
   const deleteRipple = (id) => {
-    setRipples(ripples.filter((r) => r.id !== id));
+    const rippleRef = ref(database, `ripples/${id}`);
+    remove(rippleRef);
+  };
+
+  const handleCanvasClick = (event) => {
+    event.stopPropagation();
+    setInputPos([event.point.x, event.point.y + 0.5, event.point.z]);
   };
 
   return (
@@ -75,7 +104,7 @@ export default function Resonance3D() {
         <OrbitControls />
         <Plane onClick={handleCanvasClick} />
         {ripples.map(({ id, text, position }) => (
-          <Ripple key={id} text={text} position={position} onDelete={() => deleteRipple(id)} />
+          <Ripple key={id} id={id} text={text} position={position} onDelete={deleteRipple} />
         ))}
       </Canvas>
 
