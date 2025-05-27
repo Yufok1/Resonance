@@ -156,12 +156,22 @@ export default function Resonance3D() {
     setInput("");
   };
 
-  // Updated click handler with default placement 5 units in front if no hit
+  // Click handler checks all planes and picks closest intersection
   const handleCanvasClick = (event) => {
     event.stopPropagation();
 
     if (event.intersections.length > 0) {
-      setInputPos(event.intersections[0].point.toArray());
+      let closest = event.intersections[0];
+      let minDist = closest.distance;
+
+      for (let i = 1; i < event.intersections.length; i++) {
+        if (event.intersections[i].distance < minDist) {
+          closest = event.intersections[i];
+          minDist = closest.distance;
+        }
+      }
+
+      setInputPos(closest.point.toArray());
     } else {
       const { camera, raycaster } = event;
       const direction = raycaster.ray.direction.clone().normalize();
@@ -196,7 +206,6 @@ export default function Resonance3D() {
         camera={{ position: [0, 5, 10], fov: 60 }}
         style={{ height: "100vh", background: "black" }}
       >
-        {/* Fog removed */}
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
         <OrbitControls />
@@ -207,9 +216,31 @@ export default function Resonance3D() {
         {/* Volumetric dot grid */}
         <DotGrid size={10} spacing={2} />
 
-        {/* Invisible plane for clicks */}
+        {/* Invisible ground plane (XZ) */}
         <mesh
           rotation={[-Math.PI / 2, 0, 0]}
+          position={[0, 0, 0]}
+          onClick={handleCanvasClick}
+          receiveShadow
+        >
+          <planeGeometry args={[100, 100]} />
+          <meshBasicMaterial transparent opacity={0} />
+        </mesh>
+
+        {/* Invisible vertical plane XY at Z=0 */}
+        <mesh
+          rotation={[0, 0, 0]}
+          position={[0, 0, 0]}
+          onClick={handleCanvasClick}
+          receiveShadow
+        >
+          <planeGeometry args={[100, 100]} />
+          <meshBasicMaterial transparent opacity={0} />
+        </mesh>
+
+        {/* Invisible vertical plane YZ at X=0 */}
+        <mesh
+          rotation={[0, Math.PI / 2, 0]}
           position={[0, 0, 0]}
           onClick={handleCanvasClick}
           receiveShadow
@@ -276,7 +307,7 @@ export default function Resonance3D() {
               color: "white",
               resize: "vertical",
               fontFamily: "monospace",
-              lineHeight: 1.4,
+                            lineHeight: 1.4,
             }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
@@ -293,7 +324,7 @@ export default function Resonance3D() {
             >
               Add
             </button>
-                        <button
+            <button
               onClick={() => setInputPos(null)}
               style={{ padding: "6px 14px" }}
             >
@@ -306,4 +337,3 @@ export default function Resonance3D() {
   );
 }
 
-             
