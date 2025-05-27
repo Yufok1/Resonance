@@ -12,7 +12,8 @@
     "react-dom": "^18.2.0",
     "three": "^0.152.2",
     "@react-three/fiber": "^8.13.2",
-    "@react-three/drei": "^9.45.2"
+    "@react-three/drei": "^9.45.2",
+    "firebase": "^9.22.2"
   },
   "devDependencies": {
     "vite": "^4.5.14",
