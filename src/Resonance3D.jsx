@@ -278,7 +278,7 @@ export default function Resonance3D() {
               fontFamily: "monospace",
               lineHeight: 1.4,
             }}
-            onKeyDown={(e) => {
+                        onKeyDown={(e) => {
               if (e.key === "Enter" && !e.shiftKey) {
                 e.preventDefault();
                 handleSubmit();
@@ -305,3 +305,4 @@ export default function Resonance3D() {
     </>
   );
 }
+
