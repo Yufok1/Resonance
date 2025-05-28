@@ -12,6 +12,7 @@ import {
   limitToLast
 } from "firebase/database";
 import PlacementHUD from "./PlacementHUD";
+import DotGridInstanced from "./DotGridInstanced";
 
 function Ripple({ id, text, position, onDelete }) {
   const ref = useRef();
@@ -81,7 +82,7 @@ function ProceduralObject({ position, color, shape = "box" }) {
 export default function Resonance3D() {
   const [ripples, setRipples] = useState([]);
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState("text"); // "text" or "object"
+  const [mode, setMode] = useState("text");
   const previewRef = useRef();
 
   useEffect(() => {
@@ -154,6 +155,9 @@ export default function Resonance3D() {
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
         <OrbitControls />
+
+        {/* Expanded grid */}
+        <DotGridInstanced size={100} spacing={5} />
 
         {/* HUD */}
         <PlacementHUD
