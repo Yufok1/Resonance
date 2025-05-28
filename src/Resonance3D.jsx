@@ -96,7 +96,7 @@ function KeyboardCameraController({ movementSpeed = 0.1, rotationSpeed = 0.03 })
     forwardVec.normalize();
 
     const rightVec = new THREE.Vector3();
-    rightVec.crossVectors(camera.up, forwardVec).normalize();
+    rightVec.crossVectors(forwardVec, camera.up).normalize(); // fixed cross product order
 
     const move = new THREE.Vector3();
 
@@ -105,8 +105,10 @@ function KeyboardCameraController({ movementSpeed = 0.1, rotationSpeed = 0.03 })
     if (keys.current.left) move.sub(rightVec);
     if (keys.current.right) move.add(rightVec);
 
-    move.normalize().multiplyScalar(movementSpeed);
-    camera.position.add(move);
+    if (move.lengthSq() > 0) {
+      move.normalize().multiplyScalar(movementSpeed);
+      camera.position.add(move);
+    }
   });
 
   return null;
@@ -122,7 +124,7 @@ function MouseRightDragRotation({ rotationSpeed = 0.005 }) {
     const onContextMenu = (e) => e.preventDefault(); // disable context menu
 
     const onMouseDown = (e) => {
-      if (e.button === 2) { // right mouse button
+      if (e.button === 2) {
         dragging.current = true;
         prevPos.current = { x: e.clientX, y: e.clientY };
       }
@@ -143,7 +145,7 @@ function MouseRightDragRotation({ rotationSpeed = 0.005 }) {
       // Yaw rotation (around Y axis)
       camera.rotation.y -= deltaX * rotationSpeed;
 
-      // Pitch rotation (around X axis), clamp between -90 and 90 degrees to avoid flipping
+      // Pitch rotation (around X axis), clamp between -90 and 90 degrees
       let newXRot = camera.rotation.x - deltaY * rotationSpeed;
       const PI_2 = Math.PI / 2;
       newXRot = Math.min(Math.max(newXRot, -PI_2), PI_2);
