@@ -225,6 +225,15 @@ export default function Resonance3D() {
   const [input, setInput] = useState("");
   const ghostRef = useRef(null);
 
+  // Prevent default context menu on right-click
+  useEffect(() => {
+    const handleContextMenu = (e) => e.preventDefault();
+    window.addEventListener("contextmenu", handleContextMenu);
+    return () => {
+      window.removeEventListener("contextmenu", handleContextMenu);
+    };
+  }, []);
+
   useEffect(() => {
     const ripplesRef = query(ref(database, "ripples"), limitToLast(100));
 
@@ -301,7 +310,7 @@ export default function Resonance3D() {
           boxShadow: "0 0 10px rgba(255,255,255,0.1)",
         }}
       >
-            <input
+        <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
