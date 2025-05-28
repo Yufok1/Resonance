@@ -12,9 +12,9 @@ import {
 } from "firebase/database";
 import * as THREE from "three";
 
-// Custom camera controller: WASD strafing & movement, Q/E rotation, mouse wheel zoom
-function KeyboardCameraController({ movementSpeed = 0.1, rotationSpeed = 0.03, zoomSpeed = 0.5 }) {
-  const { camera, gl } = useThree();
+// Keyboard movement and rotation controller (WASD + Q/E)
+function KeyboardCameraController({ movementSpeed = 0.1, rotationSpeed = 0.03 }) {
+  const { camera } = useThree();
   const keys = useRef({
     forward: false,
     backward: false,
@@ -24,7 +24,6 @@ function KeyboardCameraController({ movementSpeed = 0.1, rotationSpeed = 0.03, z
     rotateRight: false,
   });
 
-  // Track movement directions
   useEffect(() => {
     const onKeyDown = (e) => {
       switch (e.code) {
@@ -50,6 +49,7 @@ function KeyboardCameraController({ movementSpeed = 0.1, rotationSpeed = 0.03, z
           break;
       }
     };
+
     const onKeyUp = (e) => {
       switch (e.code) {
         case "KeyW":
@@ -75,53 +75,95 @@ function KeyboardCameraController({ movementSpeed = 0.1, rotationSpeed = 0.03, z
       }
     };
 
-    const onWheel = (e) => {
-      // Zoom forward/back along camera direction
-      const dir = new THREE.Vector3();
-      camera.getWorldDirection(dir);
-      camera.position.addScaledVector(dir, e.deltaY * zoomSpeed * -0.01);
-    };
-
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
-    gl.domElement.addEventListener("wheel", onWheel, { passive: true });
 
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
-      gl.domElement.removeEventListener("wheel", onWheel);
     };
-  }, [camera, gl.domElement, zoomSpeed]);
+  }, []);
 
   useFrame(() => {
-    // Rotation
-    if (keys.current.rotateLeft) {
-      camera.rotation.y += rotationSpeed;
-    }
-    if (keys.current.rotateRight) {
-      camera.rotation.y -= rotationSpeed;
-    }
+    // Rotation keys (Q/E)
+    if (keys.current.rotateLeft) camera.rotation.y += rotationSpeed;
+    if (keys.current.rotateRight) camera.rotation.y -= rotationSpeed;
 
-    // Movement vector
+    // Movement vectors
     const forwardVec = new THREE.Vector3();
     camera.getWorldDirection(forwardVec);
-    forwardVec.y = 0; // keep movement horizontal
+    forwardVec.y = 0; // horizontal movement only
     forwardVec.normalize();
 
     const rightVec = new THREE.Vector3();
     rightVec.crossVectors(camera.up, forwardVec).normalize();
 
-    // Movement offset
     const move = new THREE.Vector3();
 
     if (keys.current.forward) move.add(forwardVec);
     if (keys.current.backward) move.sub(forwardVec);
-    if (keys.current.left) move.add(rightVec);
-    if (keys.current.right) move.sub(rightVec);
+    if (keys.current.left) move.sub(rightVec);
+    if (keys.current.right) move.add(rightVec);
 
     move.normalize().multiplyScalar(movementSpeed);
     camera.position.add(move);
   });
+
+  return null;
+}
+
+// Mouse right-click drag rotation controller
+function MouseRightDragRotation({ rotationSpeed = 0.005 }) {
+  const { camera, gl } = useThree();
+  const dragging = useRef(false);
+  const prevPos = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const onContextMenu = (e) => e.preventDefault(); // disable context menu
+
+    const onMouseDown = (e) => {
+      if (e.button === 2) { // right mouse button
+        dragging.current = true;
+        prevPos.current = { x: e.clientX, y: e.clientY };
+      }
+    };
+
+    const onMouseUp = (e) => {
+      if (e.button === 2) {
+        dragging.current = false;
+      }
+    };
+
+    const onMouseMove = (e) => {
+      if (!dragging.current) return;
+
+      const deltaX = e.clientX - prevPos.current.x;
+      const deltaY = e.clientY - prevPos.current.y;
+
+      // Yaw rotation (around Y axis)
+      camera.rotation.y -= deltaX * rotationSpeed;
+
+      // Pitch rotation (around X axis), clamp between -90 and 90 degrees to avoid flipping
+      let newXRot = camera.rotation.x - deltaY * rotationSpeed;
+      const PI_2 = Math.PI / 2;
+      newXRot = Math.min(Math.max(newXRot, -PI_2), PI_2);
+      camera.rotation.x = newXRot;
+
+      prevPos.current = { x: e.clientX, y: e.clientY };
+    };
+
+    gl.domElement.addEventListener("contextmenu", onContextMenu);
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("mousemove", onMouseMove);
+
+    return () => {
+      gl.domElement.removeEventListener("contextmenu", onContextMenu);
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("mousemove", onMouseMove);
+    };
+  }, [camera, gl.domElement, rotationSpeed]);
 
   return null;
 }
@@ -291,6 +333,7 @@ export default function Resonance3D() {
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
         <KeyboardCameraController />
+        <MouseRightDragRotation />
         <PlusSignAxes size={5} thickness={0.2} />
         <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
