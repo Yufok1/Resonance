@@ -114,13 +114,6 @@ useEffect(() => {
 
   const unsubscribe = onValue(ripplesRef, (snapshot) => {
     const data = snapshot.val() || {};
-    const loaded = Object.entries(data).map(([id, val]) => ({
-      id,
-      text: val.text,
-      position: val.position,
-      rotation: val.rotation || [0, 0, 0],
-    }));
-    setRipples(loaded);
 
     // === ECHO RESET LOGIC ===
     const now = Date.now();
@@ -166,18 +159,27 @@ this is just
     if (!lastReset || now - parseInt(lastReset) >= RESET_INTERVAL) {
       localStorage.setItem("resonance_last_reset", now.toString());
 
-      const hasEcho = Object.values(data).some(
-        (entry) => entry.text === ECHO_MESSAGE
-      );
+      // Remove all ripples first
+      Object.keys(data).forEach((key) => {
+        remove(ref(database, `ripples/${key}`));
+      });
 
-      if (!hasEcho) {
-        push(ref(database, "ripples"), {
-          text: ECHO_MESSAGE,
-          position: [0, 0, 0],
-          rotation: [0, 0, 0],
-        });
-      }
+      // Then add Echo message
+      push(ref(database, "ripples"), {
+        text: ECHO_MESSAGE,
+        position: [0, 0, 0],
+        rotation: [0, 0, 0],
+      });
     }
+
+    // Now update the state after reset logic
+    const loaded = Object.entries(data).map(([id, val]) => ({
+      id,
+      text: val.text,
+      position: val.position,
+      rotation: val.rotation || [0, 0, 0],
+    }));
+    setRipples(loaded);
   });
 
   return () => unsubscribe();
