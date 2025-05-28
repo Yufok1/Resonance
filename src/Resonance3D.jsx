@@ -8,9 +8,40 @@ import {
   push,
   remove,
   query,
-  limitToLast
+  limitToLast,
 } from "firebase/database";
 import * as THREE from "three";
+
+// Custom FlyControls that rotate only on right-click drag
+function CustomFlyControls(props) {
+  const controls = useRef();
+
+  useEffect(() => {
+    const onMouseDown = (e) => {
+      if (e.button === 2) {
+        controls.current.enabled = true;
+      } else {
+        controls.current.enabled = false;
+      }
+    };
+
+    const onMouseUp = (e) => {
+      if (e.button === 2) {
+        controls.current.enabled = false;
+      }
+    };
+
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mouseup", onMouseUp);
+
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+  }, []);
+
+  return <FlyControls ref={controls} dragToLook={true} {...props} />;
+}
 
 // Ghost HUD text that lives in front of the camera
 const GhostText = React.forwardRef(({ text }, ref) => {
@@ -129,7 +160,9 @@ export default function Resonance3D() {
   const addRipple = () => {
     if (!input.trim() || !ghostRef.current) return;
     const pos = ghostRef.current.position;
-    const rot = new THREE.Euler().setFromQuaternion(ghostRef.current.quaternion).toArray();
+    const rot = new THREE.Euler()
+      .setFromQuaternion(ghostRef.current.quaternion)
+      .toArray();
     push(ref(database, "ripples"), {
       text: input,
       position: [pos.x, pos.y, pos.z],
@@ -144,10 +177,14 @@ export default function Resonance3D() {
 
   return (
     <>
-      <Canvas shadows camera={{ position: [0, 2, 10], fov: 75 }} style={{ height: "100vh", background: "black" }}>
+      <Canvas
+        shadows
+        camera={{ position: [0, 2, 10], fov: 75 }}
+        style={{ height: "100vh", background: "black" }}
+      >
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
-        <FlyControls movementSpeed={10} rollSpeed={0.5} dragToLook={false} />
+        <CustomFlyControls movementSpeed={10} rollSpeed={0.5} />
         <axesHelper args={[5]} />
         <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
