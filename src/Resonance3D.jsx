@@ -12,7 +12,7 @@ import {
 } from "firebase/database";
 import * as THREE from "three";
 
-// Fixed direction camera controller with no rotation
+// Fixed direction camera controller with no rotation roll, moves position only
 function FixedDirectionCameraController({ movementSpeed = 0.1 }) {
   const { camera } = useThree();
   const keys = useRef({
@@ -98,19 +98,20 @@ function FixedDirectionCameraController({ movementSpeed = 0.1 }) {
       camera.position.add(move);
     }
 
-    // Keep camera rotation fixed to zero (no rotation)
-    camera.rotation.set(0, 0, 0);
+    // Keep camera roll fixed to zero (no roll rotation)
+    // Allow pitch and yaw to be controlled by right-click drag only
+    // Do NOT reset rotation here
   });
 
   return null;
 }
 
-// Right-click drag moves camera left/right/up/down (hard stop, no inertia)
-function RightClickDragMove() {
+// Right-click drag rotates camera yaw and pitch only (no roll)
+function RightClickDragRotate() {
   const { camera, gl } = useThree();
   const dragging = useRef(false);
   const prevPos = useRef({ x: 0, y: 0 });
-  const moveSpeed = 0.01; // sensitivity, adjust if needed
+  const sensitivity = 0.005;
 
   useEffect(() => {
     const onMouseDown = (e) => {
@@ -132,8 +133,12 @@ function RightClickDragMove() {
       const deltaX = e.clientX - prevPos.current.x;
       const deltaY = e.clientY - prevPos.current.y;
 
-      camera.position.x -= deltaX * moveSpeed;
-      camera.position.y += deltaY * moveSpeed;
+      camera.rotation.y -= deltaX * sensitivity; // yaw
+      let newPitch = camera.rotation.x - deltaY * sensitivity; // pitch
+      const limit = Math.PI / 2;
+      camera.rotation.x = Math.min(Math.max(newPitch, -limit), limit);
+
+      // No roll adjustment at all
 
       prevPos.current = { x: e.clientX, y: e.clientY };
     };
@@ -327,7 +332,7 @@ export default function Resonance3D() {
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
         <FixedDirectionCameraController />
-        <RightClickDragMove />
+        <RightClickDragRotate />
         <PlusSignAxes size={5} thickness={0.2} />
         <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
