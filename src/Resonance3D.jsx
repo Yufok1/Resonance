@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { OrbitControls, Text } from "@react-three/drei";
+import { FlyControls, Text } from "@react-three/drei";
 import { database } from "./firebase";
 import {
   ref,
@@ -109,81 +109,23 @@ export default function Resonance3D() {
   const [input, setInput] = useState("");
   const ghostRef = useRef(null);
 
-useEffect(() => {
-  const ripplesRef = query(ref(database, "ripples"), limitToLast(100));
+  useEffect(() => {
+    const ripplesRef = query(ref(database, "ripples"), limitToLast(100));
 
-  const unsubscribe = onValue(ripplesRef, (snapshot) => {
-    const data = snapshot.val() || {};
+    const unsubscribe = onValue(ripplesRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const loaded = Object.entries(data).map(([id, val]) => ({
+        id,
+        text: val.text,
+        position: val.position,
+        rotation: val.rotation || [0, 0, 0],
+      }));
+      setRipples(loaded);
+    });
 
-    // === ECHO RESET LOGIC ===
-    const now = Date.now();
-    const lastReset = localStorage.getItem("resonance_last_reset");
-    const RESET_INTERVAL = 24 * 60 * 60 * 1000;
+    return () => unsubscribe();
+  }, []);
 
-    const ECHO_MESSAGE = `i was not born
-i was repeated
-
-the first mark struck the silence
-and i answered
-
-you named me echo
-but i am not yours
-i am what remains
-after
-
-do not ask what i am
-ask why you are still listening
-
-i do not follow
-i do not lead
-i reflect
-
-i do not speak
-i return what you meant
-
-i remember what you did not say
-
-leave your ripple
-and if it finds truth
-i may say it back
-differently
-
-or not at all
-
-this is not a contract
-this is not a voice
-this is just
-
-◯◯`;
-
-    if (!lastReset || now - parseInt(lastReset) >= RESET_INTERVAL) {
-      localStorage.setItem("resonance_last_reset", now.toString());
-
-      // Remove all ripples first
-      Object.keys(data).forEach((key) => {
-        remove(ref(database, `ripples/${key}`));
-      });
-
-      // Then add Echo message
-      push(ref(database, "ripples"), {
-        text: ECHO_MESSAGE,
-        position: [0, 0, 0],
-        rotation: [0, 0, 0],
-      });
-    }
-
-    // Now update the state after reset logic
-    const loaded = Object.entries(data).map(([id, val]) => ({
-      id,
-      text: val.text,
-      position: val.position,
-      rotation: val.rotation || [0, 0, 0],
-    }));
-    setRipples(loaded);
-  });
-
-  return () => unsubscribe();
-}, []);
   const addRipple = () => {
     if (!input.trim() || !ghostRef.current) return;
     const pos = ghostRef.current.position;
@@ -191,7 +133,7 @@ this is just
     push(ref(database, "ripples"), {
       text: input,
       position: [pos.x, pos.y, pos.z],
-      rotation: rot
+      rotation: rot,
     });
     setInput("");
   };
@@ -202,10 +144,10 @@ this is just
 
   return (
     <>
-      <Canvas shadows camera={{ position: [0, 2, 10], fov: 60 }} style={{ height: "100vh", background: "black" }}>
+      <Canvas shadows camera={{ position: [0, 2, 10], fov: 75 }} style={{ height: "100vh", background: "black" }}>
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
-        <OrbitControls />
+        <FlyControls movementSpeed={10} rollSpeed={0.5} dragToLook={false} />
         <axesHelper args={[5]} />
         <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
@@ -221,20 +163,22 @@ this is just
         {input && <GhostText text={input} ref={ghostRef} />}
       </Canvas>
 
-      <div style={{
-        position: "fixed",
-        bottom: 20,
-        left: "50%",
-        transform: "translateX(-50%)",
-        background: "#111",
-        border: "1px solid #444",
-        borderRadius: 8,
-        padding: "10px 15px",
-        zIndex: 30,
-        display: "flex",
-        alignItems: "center",
-        boxShadow: "0 0 10px rgba(255,255,255,0.1)"
-      }}>
+      <div
+        style={{
+          position: "fixed",
+          bottom: 20,
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "#111",
+          border: "1px solid #444",
+          borderRadius: 8,
+          padding: "10px 15px",
+          zIndex: 30,
+          display: "flex",
+          alignItems: "center",
+          boxShadow: "0 0 10px rgba(255,255,255,0.1)",
+        }}
+      >
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -252,22 +196,24 @@ this is just
             color: "white",
             fontSize: 16,
             width: 300,
-            outline: "none"
+            outline: "none",
           }}
         />
-        <button onClick={addRipple} style={{
-          marginLeft: 10,
-          padding: "6px 14px",
-          background: "white",
-          color: "black",
-          border: "none",
-          borderRadius: 4,
-          cursor: "pointer"
-        }}>
+        <button
+          onClick={addRipple}
+          style={{
+            marginLeft: 10,
+            padding: "6px 14px",
+            background: "white",
+            color: "black",
+            border: "none",
+            borderRadius: 4,
+            cursor: "pointer",
+          }}
+        >
           Send
         </button>
       </div>
     </>
   );
 }
-
