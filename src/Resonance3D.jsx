@@ -105,6 +105,54 @@ function FixedDirectionCameraController({ movementSpeed = 0.1 }) {
   return null;
 }
 
+// Right-click drag moves camera left/right/up/down (hard stop, no inertia)
+function RightClickDragMove() {
+  const { camera, gl } = useThree();
+  const dragging = useRef(false);
+  const prevPos = useRef({ x: 0, y: 0 });
+  const moveSpeed = 0.01; // sensitivity, adjust if needed
+
+  useEffect(() => {
+    const onMouseDown = (e) => {
+      if (e.button === 2) {
+        dragging.current = true;
+        prevPos.current = { x: e.clientX, y: e.clientY };
+      }
+    };
+
+    const onMouseUp = (e) => {
+      if (e.button === 2) {
+        dragging.current = false;
+      }
+    };
+
+    const onMouseMove = (e) => {
+      if (!dragging.current) return;
+
+      const deltaX = e.clientX - prevPos.current.x;
+      const deltaY = e.clientY - prevPos.current.y;
+
+      camera.position.x -= deltaX * moveSpeed;
+      camera.position.y += deltaY * moveSpeed;
+
+      prevPos.current = { x: e.clientX, y: e.clientY };
+    };
+
+    gl.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
+    window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("mousemove", onMouseMove);
+
+    return () => {
+      window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("mousemove", onMouseMove);
+    };
+  }, [camera, gl.domElement]);
+
+  return null;
+}
+
 // Ghost HUD text that lives in front of the camera
 const GhostText = React.forwardRef(({ text }, ref) => {
   const textRef = useRef();
@@ -279,6 +327,7 @@ export default function Resonance3D() {
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
         <FixedDirectionCameraController />
+        <RightClickDragMove />
         <PlusSignAxes size={5} thickness={0.2} />
         <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
@@ -348,4 +397,3 @@ export default function Resonance3D() {
     </>
   );
 }
-
