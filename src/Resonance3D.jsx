@@ -13,6 +13,7 @@ import {
 import * as THREE from "three";
 
 // Custom FlyControls that rotate only on right-click drag
+// and hard stop movement on mouse/key release
 function CustomFlyControls(props) {
   const controls = useRef();
 
@@ -29,14 +30,25 @@ function CustomFlyControls(props) {
       if (e.button === 2) {
         controls.current.enabled = false;
       }
+      if (controls.current) {
+        controls.current.velocity.set(0, 0, 0);
+      }
+    };
+
+    const onKeyUp = () => {
+      if (controls.current) {
+        controls.current.velocity.set(0, 0, 0);
+      }
     };
 
     window.addEventListener("mousedown", onMouseDown);
     window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("keyup", onKeyUp);
 
     return () => {
       window.removeEventListener("mousedown", onMouseDown);
       window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("keyup", onKeyUp);
     };
   }, []);
 
@@ -135,6 +147,29 @@ function DotGrid({ size = 20, spacing = 2 }) {
   );
 }
 
+// Custom 3D plus sign axis indicator
+function PlusSignAxes({ size = 5, thickness = 0.2 }) {
+  return (
+    <group>
+      {/* X axis */}
+      <mesh position={[size / 2, 0, 0]}>
+        <boxGeometry args={[size, thickness, thickness]} />
+        <meshStandardMaterial color="red" />
+      </mesh>
+      {/* Y axis */}
+      <mesh position={[0, size / 2, 0]}>
+        <boxGeometry args={[thickness, size, thickness]} />
+        <meshStandardMaterial color="green" />
+      </mesh>
+      {/* Z axis */}
+      <mesh position={[0, 0, size / 2]}>
+        <boxGeometry args={[thickness, thickness, size]} />
+        <meshStandardMaterial color="blue" />
+      </mesh>
+    </group>
+  );
+}
+
 export default function Resonance3D() {
   const [ripples, setRipples] = useState([]);
   const [input, setInput] = useState("");
@@ -185,7 +220,7 @@ export default function Resonance3D() {
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
         <CustomFlyControls movementSpeed={10} rollSpeed={0.5} />
-        <axesHelper args={[5]} />
+        <PlusSignAxes size={5} thickness={0.2} />
         <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
           <Ripple
