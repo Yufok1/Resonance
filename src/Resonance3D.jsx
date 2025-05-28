@@ -1,6 +1,5 @@
-// src/Resonance3D.jsx
-import React, { useState, useEffect, useRef } from "react";
-import { Canvas, useThree } from "@react-three/fiber";
+import React, { useState, useRef, useEffect } from "react";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Text } from "@react-three/drei";
 import { database } from "./firebase";
 import {
@@ -11,18 +10,20 @@ import {
   query,
   limitToLast
 } from "firebase/database";
-import PlacementHUD from "./PlacementHUD";
-import DotGridInstanced from "./DotGridInstanced";
 
+// Ripple text element that always faces the camera and fades with distance
 function Ripple({ id, text, position, onDelete }) {
   const ref = useRef();
   const { camera } = useThree();
+  const [opacity, setOpacity] = useState(1);
 
-  useEffect(() => {
+  useFrame(() => {
     if (ref.current) {
       ref.current.lookAt(camera.position);
+      const distance = ref.current.position.distanceTo(camera.position);
+      setOpacity(Math.max(0, 1 - distance / 50)); // Fade with distance
     }
-  }, [camera]);
+  });
 
   return (
     <group position={position}>
@@ -36,6 +37,7 @@ function Ripple({ id, text, position, onDelete }) {
         lineHeight={1}
         onClick={() => onDelete(id)}
         style={{ cursor: "pointer" }}
+        fillOpacity={opacity}
       >
         {text}
       </Text>
@@ -43,161 +45,152 @@ function Ripple({ id, text, position, onDelete }) {
   );
 }
 
-function ProceduralObject({ position, color, shape = "box" }) {
-  const ref = useRef();
-  const { camera } = useThree();
-
-  useEffect(() => {
-    if (ref.current) {
-      ref.current.lookAt(camera.position);
+// 3D volumetric dot grid for spatial reference
+function DotGrid({ size = 20, spacing = 2 }) {
+  const dots = [];
+  for (let x = -size; x <= size; x += spacing) {
+    for (let y = -size; y <= size; y += spacing) {
+      for (let z = -size; z <= size; z += spacing) {
+        dots.push([x, y, z]);
+      }
     }
-  });
-
-  let geometry;
-  switch (shape.toLowerCase()) {
-    case "sphere":
-      geometry = <sphereGeometry args={[0.75, 32, 32]} />;
-      break;
-    case "cone":
-      geometry = <coneGeometry args={[0.7, 1.2, 32]} />;
-      break;
-    case "cylinder":
-      geometry = <cylinderGeometry args={[0.5, 0.5, 1.2, 32]} />;
-      break;
-    case "torus":
-      geometry = <torusGeometry args={[0.5, 0.2, 16, 100]} />;
-      break;
-    default:
-      geometry = <boxGeometry args={[1, 1, 1]} />;
   }
-
   return (
-    <mesh position={position} ref={ref} castShadow>
-      {geometry}
-      <meshStandardMaterial color={color} />
-    </mesh>
+    <>
+      {dots.map((pos, i) => (
+        <mesh key={i} position={pos}>
+          <sphereGeometry args={[0.05, 8, 8]} />
+          <meshBasicMaterial color="#555" opacity={0.2} transparent />
+        </mesh>
+      ))}
+    </>
   );
 }
 
 export default function Resonance3D() {
   const [ripples, setRipples] = useState([]);
   const [input, setInput] = useState("");
-  const [mode, setMode] = useState("text");
-  const previewRef = useRef();
+  const [inputPos, setInputPos] = useState(null);
 
+  // Load latest ripples from Firebase
   useEffect(() => {
-    const ripplesRef = query(ref(database, "ripples"), limitToLast(100));
+    const ripplesRef = query(ref(database, "ripples"), limitToLast(50));
     const unsubscribe = onValue(ripplesRef, (snapshot) => {
       const data = snapshot.val() || {};
-      const all = Object.entries(data).map(([id, r]) => ({ id, ...r }));
-      setRipples(all);
+      const loadedRipples = Object.entries(data).map(([id, ripple]) => ({
+        id,
+        text: ripple.text,
+        position: ripple.position,
+      }));
+      setRipples(loadedRipples);
     });
     return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.key === "Enter" && previewRef.current) {
-        const pos = previewRef.current.position.toArray();
-        const now = Date.now();
+  // Add ripple to Firebase
+  const addRipple = () => {
+    if (!input.trim() || !inputPos) return;
+    const ripplesRef = ref(database, "ripples");
+    push(ripplesRef, { text: input, position: inputPos });
+    setInput("");
+    setInputPos(null);
+  };
 
-        if (mode === "text") {
-          push(ref(database, "ripples"), {
-            type: "text",
-            text: input,
-            position: pos,
-            createdAt: now,
-          });
-        } else {
-          let color = "gray";
-          if (input.toLowerCase().includes("red")) color = "red";
-          else if (input.toLowerCase().includes("blue")) color = "blue";
-          else if (input.toLowerCase().includes("green")) color = "green";
-
-          let shape = "box";
-          if (input.toLowerCase().includes("sphere")) shape = "sphere";
-          else if (input.toLowerCase().includes("cone")) shape = "cone";
-          else if (input.toLowerCase().includes("cylinder")) shape = "cylinder";
-          else if (input.toLowerCase().includes("torus")) shape = "torus";
-
-          push(ref(database, "ripples"), {
-            type: "object",
-            shape,
-            color,
-            position: pos,
-            createdAt: now,
-          });
-        }
-
-        setInput("");
-      }
-    };
-    window.addEventListener("keydown", handleKey);
-    return () => window.removeEventListener("keydown", handleKey);
-  }, [input, mode]);
-
+  // Delete ripple
   const deleteRipple = (id) => {
-    remove(ref(database, `ripples/${id}`));
+    const rippleRef = ref(database, `ripples/${id}`);
+    remove(rippleRef);
+  };
+
+  // Set input position based on click direction
+  const handleCanvasClick = (event) => {
+    const { camera, raycaster } = event;
+    const direction = raycaster.ray.direction.clone().normalize();
+    const position = camera.position.clone().add(direction.multiplyScalar(5));
+    setInputPos(position.toArray());
   };
 
   return (
     <>
-      <div style={{ position: "fixed", top: 20, left: 20, zIndex: 20 }}>
-        <button
-          onClick={() => setMode(mode === "text" ? "object" : "text")}
-          style={{ padding: "8px 16px" }}
-        >
-          Switch to {mode === "text" ? "Object" : "Text"} Mode
-        </button>
-      </div>
-
-      <Canvas shadows camera={{ position: [0, 5, 10], fov: 60 }} style={{ height: "100vh", background: "black" }}>
+      <Canvas
+        shadows
+        camera={{ position: [0, 5, 10], fov: 60 }}
+        style={{ height: "100vh", background: "black" }}
+        onClick={handleCanvasClick}
+      >
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
         <OrbitControls />
+        <DotGrid size={20} spacing={2} />
 
-        {/* Expanded grid */}
-        <DotGridInstanced size={100} spacing={5} />
-
-        {/* HUD */}
-        <PlacementHUD
-          shape={mode === "text" ? "box" : "sphere"}
-          text={input}
-          color="cyan"
-          previewRef={previewRef}
-        />
-
-        {/* Render all ripple types */}
-        {ripples.map(({ id, type, text, shape, color, position }) =>
-          type === "text" ? (
-            <Ripple key={id} id={id} text={text} position={position} onDelete={deleteRipple} />
-          ) : (
-            <ProceduralObject key={id} position={position} shape={shape} color={color} />
-          )
-        )}
+        {ripples.map(({ id, text, position }) => (
+          <Ripple
+            key={id}
+            id={id}
+            text={text}
+            position={position}
+            onDelete={deleteRipple}
+          />
+        ))}
       </Canvas>
 
-      {/* Input UI */}
-      <div style={{ position: "fixed", bottom: 20, left: 20, zIndex: 30 }}>
-        <textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder={mode === "text" ? "Type your ripple..." : "Type object prompt (e.g. 'red sphere')..."}
+      {inputPos && (
+        <div
           style={{
-            fontSize: 16,
-            padding: 10,
-            width: 300,
-            height: 80,
-            borderRadius: 5,
-            border: "1px solid #555",
-            backgroundColor: "#111",
-            color: "white",
-            resize: "none",
-            fontFamily: "monospace",
-            lineHeight: 1.4,
+            position: "fixed",
+            top: 60,
+            left: 20,
+            background: "rgba(0,0,0,0.85)",
+            padding: 15,
+            borderRadius: 8,
+            zIndex: 30,
+            width: 400,
+            maxWidth: "80vw",
+            boxShadow: "0 0 15px rgba(255,255,255,0.1)",
           }}
-        />
-      </div>
+        >
+          <textarea
+            autoFocus
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Type your ripple..."
+            style={{
+              fontSize: 16,
+              padding: 10,
+              width: "100%",
+              height: 120,
+              borderRadius: 5,
+              border: "1px solid #555",
+              backgroundColor: "#111",
+              color: "white",
+              resize: "vertical",
+              fontFamily: "monospace",
+              lineHeight: 1.4,
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                addRipple();
+              }
+              if (e.key === "Escape") setInputPos(null);
+            }}
+          />
+          <div style={{ marginTop: 10, textAlign: "right" }}>
+            <button
+              onClick={addRipple}
+              style={{ padding: "6px 14px", marginRight: 8 }}
+            >
+              Add
+            </button>
+            <button
+              onClick={() => setInputPos(null)}
+              style={{ padding: "6px 14px" }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 }
