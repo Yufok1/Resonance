@@ -132,6 +132,80 @@ export default function Resonance3D() {
   const [input, setInput] = useState("");
   const ghostRef = useRef(null);
 
+  // Keyboard movement state
+  const keys = useRef({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    up: false,
+    down: false,
+  });
+
+  // Keyboard event listeners
+  useEffect(() => {
+    const down = (e) => {
+      switch (e.code) {
+        case "KeyW":
+          keys.current.forward = true;
+          break;
+        case "KeyS":
+          keys.current.backward = true;
+          break;
+        case "KeyA":
+          keys.current.left = true;
+          break;
+        case "KeyD":
+          keys.current.right = true;
+          break;
+        case "Space":
+          keys.current.up = true;
+          break;
+        case "KeyC":
+          keys.current.down = true;
+          break;
+      }
+    };
+    const up = (e) => {
+      switch (e.code) {
+        case "KeyW":
+          keys.current.forward = false;
+          break;
+        case "KeyS":
+          keys.current.backward = false;
+          break;
+        case "KeyA":
+          keys.current.left = false;
+          break;
+        case "KeyD":
+          keys.current.right = false;
+          break;
+        case "Space":
+          keys.current.up = false;
+          break;
+        case "KeyC":
+          keys.current.down = false;
+          break;
+      }
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
+
+  // Prevent context menu on right click
+  useEffect(() => {
+    const handleContextMenu = (e) => e.preventDefault();
+    window.addEventListener("contextmenu", handleContextMenu);
+    return () => {
+      window.removeEventListener("contextmenu", handleContextMenu);
+    };
+  }, []);
+
+  // Listen to Firebase ripples
   useEffect(() => {
     const ripplesRef = query(ref(database, "ripples"), limitToLast(100));
 
@@ -148,6 +222,51 @@ export default function Resonance3D() {
 
     return () => unsubscribe();
   }, []);
+
+  // Move camera according to keys pressed, relative to camera rotation
+  useFrame(({ camera }) => {
+    const moveSpeed = 0.1;
+    const direction = new THREE.Vector3();
+    const right = new THREE.Vector3();
+
+    // Forward/back
+    if (keys.current.forward) {
+      camera.getWorldDirection(direction);
+      direction.y = 0;
+      direction.normalize();
+      camera.position.addScaledVector(direction, moveSpeed);
+    }
+    if (keys.current.backward) {
+      camera.getWorldDirection(direction);
+      direction.y = 0;
+      direction.normalize();
+      camera.position.addScaledVector(direction, -moveSpeed);
+    }
+
+    // Left/right strafing
+    if (keys.current.left) {
+      camera.getWorldDirection(direction);
+      direction.y = 0;
+      direction.normalize();
+      right.crossVectors(camera.up, direction).normalize();
+      camera.position.addScaledVector(right, moveSpeed);
+    }
+    if (keys.current.right) {
+      camera.getWorldDirection(direction);
+      direction.y = 0;
+      direction.normalize();
+      right.crossVectors(camera.up, direction).normalize();
+      camera.position.addScaledVector(right, -moveSpeed);
+    }
+
+    // Up/down vertical movement
+    if (keys.current.up) {
+      camera.position.y += moveSpeed;
+    }
+    if (keys.current.down) {
+      camera.position.y -= moveSpeed;
+    }
+  });
 
   const addRipple = () => {
     if (!input.trim() || !ghostRef.current) return;
@@ -246,3 +365,4 @@ export default function Resonance3D() {
     </>
   );
 }
+
