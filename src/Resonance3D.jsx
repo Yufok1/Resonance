@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { Text } from "@react-three/drei";
+import { Text, PointerLockControls } from "@react-three/drei";
 import { database } from "./firebase";
 import {
   ref,
@@ -11,152 +11,6 @@ import {
   limitToLast,
 } from "firebase/database";
 import * as THREE from "three";
-
-// Fixed direction camera controller with no rotation roll, moves position only
-function FixedDirectionCameraController({ movementSpeed = 0.1 }) {
-  const { camera } = useThree();
-  const keys = useRef({
-    forward: false,
-    backward: false,
-    left: false,
-    right: false,
-    up: false,
-    down: false,
-  });
-
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      switch (e.code) {
-        case "KeyW":
-          keys.current.forward = true;
-          break;
-        case "KeyS":
-          keys.current.backward = true;
-          break;
-        case "KeyA":
-          keys.current.left = true;
-          break;
-        case "KeyD":
-          keys.current.right = true;
-          break;
-        case "Space":
-          keys.current.up = true;
-          break;
-        case "KeyC":
-          keys.current.down = true;
-          break;
-        default:
-          break;
-      }
-    };
-
-    const onKeyUp = (e) => {
-      switch (e.code) {
-        case "KeyW":
-          keys.current.forward = false;
-          break;
-        case "KeyS":
-          keys.current.backward = false;
-          break;
-        case "KeyA":
-          keys.current.left = false;
-          break;
-        case "KeyD":
-          keys.current.right = false;
-          break;
-        case "Space":
-          keys.current.up = false;
-          break;
-        case "KeyC":
-          keys.current.down = false;
-          break;
-        default:
-          break;
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-    };
-  }, []);
-
-  useFrame(() => {
-    const move = new THREE.Vector3();
-
-    if (keys.current.forward) move.z -= 1;
-    if (keys.current.backward) move.z += 1;
-    if (keys.current.left) move.x -= 1;
-    if (keys.current.right) move.x += 1;
-    if (keys.current.up) move.y += 1;
-    if (keys.current.down) move.y -= 1;
-
-    if (move.lengthSq() > 0) {
-      move.normalize().multiplyScalar(movementSpeed);
-      camera.position.add(move);
-    }
-
-    // Keep camera roll fixed to zero (no roll rotation)
-    // Allow pitch and yaw to be controlled by right-click drag only
-    // Do NOT reset rotation here
-  });
-
-  return null;
-}
-
-// Right-click drag rotates camera yaw and pitch only (no roll)
-function RightClickDragRotate() {
-  const { camera, gl } = useThree();
-  const dragging = useRef(false);
-  const prevPos = useRef({ x: 0, y: 0 });
-  const sensitivity = 0.005;
-
-  useEffect(() => {
-    const onMouseDown = (e) => {
-      if (e.button === 2) {
-        dragging.current = true;
-        prevPos.current = { x: e.clientX, y: e.clientY };
-      }
-    };
-
-    const onMouseUp = (e) => {
-      if (e.button === 2) {
-        dragging.current = false;
-      }
-    };
-
-    const onMouseMove = (e) => {
-      if (!dragging.current) return;
-
-      const deltaX = e.clientX - prevPos.current.x;
-      const deltaY = e.clientY - prevPos.current.y;
-
-      camera.rotation.y -= deltaX * sensitivity; // yaw
-      let newPitch = camera.rotation.x - deltaY * sensitivity; // pitch
-      const limit = Math.PI / 2;
-      camera.rotation.x = Math.min(Math.max(newPitch, -limit), limit);
-
-      // No roll adjustment at all
-
-      prevPos.current = { x: e.clientX, y: e.clientY };
-    };
-
-    gl.domElement.addEventListener("contextmenu", (e) => e.preventDefault());
-    window.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("mouseup", onMouseUp);
-    window.addEventListener("mousemove", onMouseMove);
-
-    return () => {
-      window.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("mouseup", onMouseUp);
-      window.removeEventListener("mousemove", onMouseMove);
-    };
-  }, [camera, gl.domElement]);
-
-  return null;
-}
 
 // Ghost HUD text that lives in front of the camera
 const GhostText = React.forwardRef(({ text }, ref) => {
@@ -278,15 +132,6 @@ export default function Resonance3D() {
   const [input, setInput] = useState("");
   const ghostRef = useRef(null);
 
-  // Prevent default context menu on right-click
-  useEffect(() => {
-    const handleContextMenu = (e) => e.preventDefault();
-    window.addEventListener("contextmenu", handleContextMenu);
-    return () => {
-      window.removeEventListener("contextmenu", handleContextMenu);
-    };
-  }, []);
-
   useEffect(() => {
     const ripplesRef = query(ref(database, "ripples"), limitToLast(100));
 
@@ -331,8 +176,7 @@ export default function Resonance3D() {
       >
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
-        <FixedDirectionCameraController />
-        <RightClickDragRotate />
+        <PointerLockControls />
         <PlusSignAxes size={5} thickness={0.2} />
         <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
