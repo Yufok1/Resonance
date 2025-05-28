@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { FlyControls, Text } from "@react-three/drei";
+import { Text } from "@react-three/drei";
 import { database } from "./firebase";
 import {
   ref,
@@ -12,47 +12,118 @@ import {
 } from "firebase/database";
 import * as THREE from "three";
 
-// Custom FlyControls that rotate only on right-click drag
-// and hard stop movement on mouse/key release
-function CustomFlyControls(props) {
-  const controls = useRef();
+// Custom camera controller: WASD strafing & movement, Q/E rotation, mouse wheel zoom
+function KeyboardCameraController({ movementSpeed = 0.1, rotationSpeed = 0.03, zoomSpeed = 0.5 }) {
+  const { camera, gl } = useThree();
+  const keys = useRef({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    rotateLeft: false,
+    rotateRight: false,
+  });
 
+  // Track movement directions
   useEffect(() => {
-    const onMouseDown = (e) => {
-      if (e.button === 2) {
-        controls.current.enabled = true;
-      } else {
-        controls.current.enabled = false;
+    const onKeyDown = (e) => {
+      switch (e.code) {
+        case "KeyW":
+          keys.current.forward = true;
+          break;
+        case "KeyS":
+          keys.current.backward = true;
+          break;
+        case "KeyA":
+          keys.current.left = true;
+          break;
+        case "KeyD":
+          keys.current.right = true;
+          break;
+        case "KeyQ":
+          keys.current.rotateLeft = true;
+          break;
+        case "KeyE":
+          keys.current.rotateRight = true;
+          break;
+        default:
+          break;
+      }
+    };
+    const onKeyUp = (e) => {
+      switch (e.code) {
+        case "KeyW":
+          keys.current.forward = false;
+          break;
+        case "KeyS":
+          keys.current.backward = false;
+          break;
+        case "KeyA":
+          keys.current.left = false;
+          break;
+        case "KeyD":
+          keys.current.right = false;
+          break;
+        case "KeyQ":
+          keys.current.rotateLeft = false;
+          break;
+        case "KeyE":
+          keys.current.rotateRight = false;
+          break;
+        default:
+          break;
       }
     };
 
-    const onMouseUp = (e) => {
-      if (e.button === 2) {
-        controls.current.enabled = false;
-      }
-      if (controls.current) {
-        controls.current.velocity.set(0, 0, 0);
-      }
+    const onWheel = (e) => {
+      // Zoom forward/back along camera direction
+      const dir = new THREE.Vector3();
+      camera.getWorldDirection(dir);
+      camera.position.addScaledVector(dir, e.deltaY * zoomSpeed * -0.01);
     };
 
-    const onKeyUp = () => {
-      if (controls.current) {
-        controls.current.velocity.set(0, 0, 0);
-      }
-    };
-
-    window.addEventListener("mousedown", onMouseDown);
-    window.addEventListener("mouseup", onMouseUp);
+    window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
+    gl.domElement.addEventListener("wheel", onWheel, { passive: true });
 
     return () => {
-      window.removeEventListener("mousedown", onMouseDown);
-      window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
+      gl.domElement.removeEventListener("wheel", onWheel);
     };
-  }, []);
+  }, [camera, gl.domElement, zoomSpeed]);
 
-  return <FlyControls ref={controls} dragToLook={true} {...props} />;
+  useFrame(() => {
+    // Rotation
+    if (keys.current.rotateLeft) {
+      camera.rotation.y += rotationSpeed;
+    }
+    if (keys.current.rotateRight) {
+      camera.rotation.y -= rotationSpeed;
+    }
+
+    // Movement vector
+    const forwardVec = new THREE.Vector3();
+    camera.getWorldDirection(forwardVec);
+    forwardVec.y = 0; // keep movement horizontal
+    forwardVec.normalize();
+
+    const rightVec = new THREE.Vector3();
+    rightVec.crossVectors(camera.up, forwardVec).normalize();
+
+    // Movement offset
+    const move = new THREE.Vector3();
+
+    if (keys.current.forward) move.add(forwardVec);
+    if (keys.current.backward) move.sub(forwardVec);
+    if (keys.current.left) move.add(rightVec);
+    if (keys.current.right) move.sub(rightVec);
+
+    move.normalize().multiplyScalar(movementSpeed);
+    camera.position.add(move);
+  });
+
+  return null;
 }
 
 // Ghost HUD text that lives in front of the camera
@@ -219,7 +290,7 @@ export default function Resonance3D() {
       >
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
-        <CustomFlyControls movementSpeed={10} rollSpeed={0.5} />
+        <KeyboardCameraController />
         <PlusSignAxes size={5} thickness={0.2} />
         <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
