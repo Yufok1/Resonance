@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
-import { Text, PointerLockControls } from "@react-three/drei";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { OrbitControls, Text } from "@react-three/drei";
 import { database } from "./firebase";
 import {
   ref,
@@ -8,9 +8,46 @@ import {
   push,
   remove,
   query,
-  limitToLast,
+  limitToLast
 } from "firebase/database";
 import * as THREE from "three";
+
+// Ghost HUD text that lives in front of the camera
+const GhostText = React.forwardRef(({ text }, ref) => {
+  const textRef = useRef();
+  const { camera } = useThree();
+  const [position, setPosition] = useState([0, 0, 0]);
+
+  useFrame(() => {
+    const dir = camera.getWorldDirection(new THREE.Vector3()).normalize();
+    const ghostPos = camera.position.clone().add(dir.multiplyScalar(5));
+    setPosition([ghostPos.x, ghostPos.y, ghostPos.z]);
+    if (ref) {
+      ref.current = {
+        position: ghostPos.clone(),
+        quaternion: camera.quaternion.clone(),
+      };
+    }
+    if (textRef.current) textRef.current.lookAt(camera.position);
+  });
+
+  return (
+    <group position={position}>
+      <Text
+        ref={textRef}
+        fontSize={0.5}
+        color="white"
+        anchorX="center"
+        anchorY="middle"
+        maxWidth={4}
+        lineHeight={1}
+        fillOpacity={0.25}
+      >
+        {text}
+      </Text>
+    </group>
+  );
+});
 
 // Placed ripple with fixed position/rotation
 function Ripple({ id, text, position, rotation, onDelete }) {
@@ -67,194 +104,38 @@ function DotGrid({ size = 20, spacing = 2 }) {
   );
 }
 
-// Custom 3D plus sign axis indicator
-function PlusSignAxes({ size = 5, thickness = 0.2 }) {
-  return (
-    <group>
-      {/* X axis */}
-      <mesh position={[size / 2, 0, 0]}>
-        <boxGeometry args={[size, thickness, thickness]} />
-        <meshStandardMaterial color="red" />
-      </mesh>
-      {/* Y axis */}
-      <mesh position={[0, size / 2, 0]}>
-        <boxGeometry args={[thickness, size, thickness]} />
-        <meshStandardMaterial color="green" />
-      </mesh>
-      {/* Z axis */}
-      <mesh position={[0, 0, size / 2]}>
-        <boxGeometry args={[thickness, thickness, size]} />
-        <meshStandardMaterial color="blue" />
-      </mesh>
-    </group>
-  );
-}
-
 export default function Resonance3D() {
   const [ripples, setRipples] = useState([]);
   const [input, setInput] = useState("");
+  const ghostRef = useRef(null);
 
-  // Keyboard movement state
-  const keys = useRef({
-    forward: false,
-    backward: false,
-    left: false,
-    right: false,
-    up: false,
-    down: false,
-  });
-
-  // Track camera pose in React state
-  const [cameraPose, setCameraPose] = useState({
-    position: new THREE.Vector3(0, 2, 10),
-    quaternion: new THREE.Quaternion(),
-  });
-
-  // Keyboard event listeners
-  useEffect(() => {
-    const down = (e) => {
-      switch (e.code) {
-        case "KeyW":
-          keys.current.forward = true;
-          break;
-        case "KeyS":
-          keys.current.backward = true;
-          break;
-        case "KeyA":
-          keys.current.left = true;
-          break;
-        case "KeyD":
-          keys.current.right = true;
-          break;
-        case "Space":
-          keys.current.up = true;
-          break;
-        case "KeyC":
-          keys.current.down = true;
-          break;
-      }
-    };
-    const up = (e) => {
-      switch (e.code) {
-        case "KeyW":
-          keys.current.forward = false;
-          break;
-        case "KeyS":
-          keys.current.backward = false;
-          break;
-        case "KeyA":
-          keys.current.left = false;
-          break;
-        case "KeyD":
-          keys.current.right = false;
-          break;
-        case "Space":
-          keys.current.up = false;
-          break;
-        case "KeyC":
-          keys.current.down = false;
-          break;
-      }
-    };
-    window.addEventListener("keydown", down);
-    window.addEventListener("keyup", up);
-    return () => {
-      window.removeEventListener("keydown", down);
-      window.removeEventListener("keyup", up);
-    };
-  }, []);
-
-  // Prevent context menu on right click
-  useEffect(() => {
-    const handleContextMenu = (e) => e.preventDefault();
-    window.addEventListener("contextmenu", handleContextMenu);
-    return () => {
-      window.removeEventListener("contextmenu", handleContextMenu);
-    };
-  }, []);
-
-  // Listen to Firebase ripples
   useEffect(() => {
     const ripplesRef = query(ref(database, "ripples"), limitToLast(100));
-
     const unsubscribe = onValue(ripplesRef, (snapshot) => {
       const data = snapshot.val() || {};
       const loaded = Object.entries(data).map(([id, val]) => ({
         id,
         text: val.text,
         position: val.position,
-        rotation: val.rotation || [0, 0, 0],
+        rotation: val.rotation || [0, 0, 0]
       }));
       setRipples(loaded);
     });
-
     return () => unsubscribe();
   }, []);
-  // Update camera pose state every frame
-  useFrame(({ camera }) => {
-    setCameraPose({
-      position: camera.position.clone(),
-      quaternion: camera.quaternion.clone(),
-    });
-
-    const moveSpeed = 0.1;
-    const direction = new THREE.Vector3();
-    const right = new THREE.Vector3();
-
-    // Forward/back
-    if (keys.current.forward) {
-      camera.getWorldDirection(direction);
-      direction.y = 0;
-      direction.normalize();
-      camera.position.addScaledVector(direction, moveSpeed);
-    }
-    if (keys.current.backward) {
-      camera.getWorldDirection(direction);
-      direction.y = 0;
-      direction.normalize();
-      camera.position.addScaledVector(direction, -moveSpeed);
-    }
-
-    // Left/right strafing
-    if (keys.current.left) {
-      camera.getWorldDirection(direction);
-      direction.y = 0;
-      direction.normalize();
-      right.crossVectors(camera.up, direction).normalize();
-      camera.position.addScaledVector(right, moveSpeed);
-    }
-    if (keys.current.right) {
-      camera.getWorldDirection(direction);
-      direction.y = 0;
-      direction.normalize();
-      right.crossVectors(camera.up, direction).normalize();
-      camera.position.addScaledVector(right, -moveSpeed);
-    }
-
-    // Up/down vertical movement
-    if (keys.current.up) {
-      camera.position.y += moveSpeed;
-    }
-    if (keys.current.down) {
-      camera.position.y -= moveSpeed;
-    }
-  });
 
   const addRipple = () => {
-    if (!input.trim()) return;
-    const pos = [
-      cameraPose.position.x,
-      cameraPose.position.y,
-      cameraPose.position.z,
-    ];
-    const rot = new THREE.Euler()
-      .setFromQuaternion(cameraPose.quaternion)
-      .toArray();
+    if (!input.trim() || !ghostRef.current) return;
+
+    const pos = ghostRef.current.position;
+    const rot = new THREE.Euler().setFromQuaternion(ghostRef.current.quaternion).toArray();
+
     push(ref(database, "ripples"), {
       text: input,
-      position: pos,
-      rotation: rot,
+      position: [pos.x, pos.y, pos.z],
+      rotation: rot
     });
+
     setInput("");
   };
 
@@ -264,44 +145,32 @@ export default function Resonance3D() {
 
   return (
     <>
-      <Canvas
-        shadows
-        camera={{ position: [0, 2, 10], fov: 75 }}
-        style={{ height: "100vh", background: "black" }}
-      >
+      <Canvas shadows camera={{ position: [0, 5, 10], fov: 60 }} style={{ height: "100vh", background: "black" }}>
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
-        <PointerLockControls />
-        <PlusSignAxes size={5} thickness={0.2} />
+        <OrbitControls />
         <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
-          <Ripple
-            key={id}
-            id={id}
-            text={text}
-            position={position}
-            rotation={rotation}
-            onDelete={deleteRipple}
-          />
+          <Ripple key={id} id={id} text={text} position={position} rotation={rotation} onDelete={deleteRipple} />
         ))}
+        {input && <GhostText text={input} ref={ghostRef} />}
       </Canvas>
 
-      <div
-        style={{
-          position: "fixed",
-          bottom: 20,
-          left: "50%",
-          transform: "translateX(-50%)",
-          background: "#111",
-          border: "1px solid #444",
-          borderRadius: 8,
-          padding: "10px 15px",
-          zIndex: 30,
-          display: "flex",
-          alignItems: "center",
-          boxShadow: "0 0 10px rgba(255,255,255,0.1)",
-        }}
-      >
+      {/* Input UI bar */}
+      <div style={{
+        position: "fixed",
+        bottom: 20,
+        left: "50%",
+        transform: "translateX(-50%)",
+        background: "#111",
+        border: "1px solid #444",
+        borderRadius: 8,
+        padding: "10px 15px",
+        zIndex: 30,
+        display: "flex",
+        alignItems: "center",
+        boxShadow: "0 0 10px rgba(255,255,255,0.1)"
+      }}>
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -319,21 +188,18 @@ export default function Resonance3D() {
             color: "white",
             fontSize: 16,
             width: 300,
-            outline: "none",
+            outline: "none"
           }}
         />
-        <button
-          onClick={addRipple}
-          style={{
-            marginLeft: 10,
-            padding: "6px 14px",
-            background: "white",
-            color: "black",
-            border: "none",
-            borderRadius: 4,
-            cursor: "pointer",
-          }}
-        >
+        <button onClick={addRipple} style={{
+          marginLeft: 10,
+          padding: "6px 14px",
+          background: "white",
+          color: "black",
+          border: "none",
+          borderRadius: 4,
+          cursor: "pointer"
+        }}>
           Send
         </button>
       </div>
