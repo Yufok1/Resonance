@@ -53,10 +53,6 @@ const GhostText = React.forwardRef(({ text }, ref) => {
 function Ripple({ id, text, position, rotation, onDelete }) {
   const ref = useRef();
   const [opacity] = useState(1); // constant fully opaque, no fade
-
-// No need for useFrame here since opacity won't change
-
-
   return (
     <group position={position} rotation={rotEuler}>
       <Text
