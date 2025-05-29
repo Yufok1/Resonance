@@ -12,122 +12,8 @@ import {
 } from "firebase/database";
 import * as THREE from "three";
 
-// Ghost HUD text that lives in front of the camera
-const GhostText = React.forwardRef(({ text }, ref) => {
-  const textRef = useRef();
-  const { camera } = useThree();
-  const [position, setPosition] = useState([0, 0, 0]);
+// ... (GhostText, Ripple, DotGrid, PlusSignAxes components unchanged)
 
-  useFrame(() => {
-    const dir = camera.getWorldDirection(new THREE.Vector3()).normalize();
-    const ghostPos = camera.position.clone().add(dir.multiplyScalar(5));
-    setPosition([ghostPos.x, ghostPos.y, ghostPos.z]);
-    if (ref) {
-      ref.current = {
-        position: ghostPos.clone(),
-        quaternion: camera.quaternion.clone(),
-      };
-    }
-    if (textRef.current) textRef.current.lookAt(camera.position);
-  });
-
-  return (
-    <group position={position}>
-      <Text
-        ref={textRef}
-        fontSize={0.5}
-        color="white"
-        anchorX="center"
-        anchorY="middle"
-        maxWidth={4}
-        lineHeight={1}
-        fillOpacity={0.25}
-      >
-        {text}
-      </Text>
-    </group>
-  );
-});
-
-// Placed ripple with fixed position/rotation
-function Ripple({ id, text, position, rotation, onDelete }) {
-  const ref = useRef();
-  const [opacity, setOpacity] = useState(1);
-  const rotEuler = new THREE.Euler(...(rotation || [0, 0, 0]));
-
-  useFrame(({ camera }) => {
-    if (ref.current) {
-      const distance = ref.current.position.distanceTo(camera.position);
-      setOpacity(Math.max(0, 1 - distance / 50));
-    }
-  });
-
-  return (
-    <group position={position} rotation={rotEuler}>
-      <Text
-        ref={ref}
-        fontSize={0.5}
-        color="white"
-        anchorX="center"
-        anchorY="middle"
-        maxWidth={4}
-        lineHeight={1}
-        onClick={() => onDelete(id)}
-        style={{ cursor: "pointer" }}
-        fillOpacity={opacity}
-      >
-        {text}
-      </Text>
-    </group>
-  );
-}
-
-// Dot field for spatial orientation
-function DotGrid({ size = 20, spacing = 2 }) {
-  const dots = [];
-  for (let x = -size; x <= size; x += spacing) {
-    for (let y = -size; y <= size; y += spacing) {
-      for (let z = -size; z <= size; z += spacing) {
-        dots.push([x, y, z]);
-      }
-    }
-  }
-  return (
-    <>
-      {dots.map((pos, i) => (
-        <mesh key={i} position={pos}>
-          <sphereGeometry args={[0.05, 8, 8]} />
-          <meshBasicMaterial color="#555" opacity={0.15} transparent />
-        </mesh>
-      ))}
-    </>
-  );
-}
-
-// Custom 3D plus sign axis indicator
-function PlusSignAxes({ size = 5, thickness = 0.2 }) {
-  return (
-    <group>
-      {/* X axis */}
-      <mesh position={[size / 2, 0, 0]}>
-        <boxGeometry args={[size, thickness, thickness]} />
-        <meshStandardMaterial color="red" />
-      </mesh>
-      {/* Y axis */}
-      <mesh position={[0, size / 2, 0]}>
-        <boxGeometry args={[thickness, size, thickness]} />
-        <meshStandardMaterial color="green" />
-      </mesh>
-      {/* Z axis */}
-      <mesh position={[0, 0, size / 2]}>
-        <boxGeometry args={[thickness, thickness, size]} />
-        <meshStandardMaterial color="blue" />
-      </mesh>
-    </group>
-  );
-}
-
-// Helper component to capture camera ref from useThree
 function CameraRefSetter({ cameraRef }) {
   const { camera } = useThree();
   useEffect(() => {
@@ -141,6 +27,70 @@ export default function Resonance3D() {
   const [input, setInput] = useState("");
   const ghostRef = useRef(null);
   const cameraRef = useRef();
+
+  // Keys state
+  const keys = useRef({
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    up: false,
+    down: false,
+  });
+
+  useEffect(() => {
+    const down = (e) => {
+      if (e.target.tagName === "INPUT") return;
+      switch (e.code) {
+        case "KeyW":
+          keys.current.forward = true;
+          break;
+        case "KeyS":
+          keys.current.backward = true;
+          break;
+        case "KeyA":
+          keys.current.left = true;
+          break;
+        case "KeyD":
+          keys.current.right = true;
+          break;
+        case "Space":
+          keys.current.up = true;
+          break;
+        case "KeyC":
+          keys.current.down = true;
+          break;
+      }
+    };
+    const up = (e) => {
+      switch (e.code) {
+        case "KeyW":
+          keys.current.forward = false;
+          break;
+        case "KeyS":
+          keys.current.backward = false;
+          break;
+        case "KeyA":
+          keys.current.left = false;
+          break;
+        case "KeyD":
+          keys.current.right = false;
+          break;
+        case "Space":
+          keys.current.up = false;
+          break;
+        case "KeyC":
+          keys.current.down = false;
+          break;
+      }
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
 
   // Listen to Firebase ripples
   useEffect(() => {
@@ -158,33 +108,38 @@ export default function Resonance3D() {
     return () => unsubscribe();
   }, []);
 
-  // Handle W/S keys for forward/back movement relative to camera direction
-  useEffect(() => {
-    const onKeyDown = (e) => {
-      // Ignore if typing in input
-      if (e.target.tagName === "INPUT") return;
+  useFrame(() => {
+    if (!cameraRef.current) return;
+    const moveSpeed = 0.1;
+    const camera = cameraRef.current;
 
-      if (e.code === "KeyW" || e.key === "w") {
-        if (!cameraRef.current) return;
-        const dir = new THREE.Vector3();
-        cameraRef.current.getWorldDirection(dir);
-        cameraRef.current.position.addScaledVector(dir, 0.5);
-      }
-      if (e.code === "KeyS" || e.key === "s") {
-        if (!cameraRef.current) return;
-        const dir = new THREE.Vector3();
-        cameraRef.current.getWorldDirection(dir);
-        cameraRef.current.position.addScaledVector(dir, -0.5);
-      }
-    };
+    // Calculate directions
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
 
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
+    const right = new THREE.Vector3();
+    right.crossVectors(camera.up, forward).normalize();
+
+    // Movement vector
+    const moveVector = new THREE.Vector3();
+
+    if (keys.current.forward) moveVector.add(forward);
+    if (keys.current.backward) moveVector.sub(forward);
+    if (keys.current.left) moveVector.sub(right);
+    if (keys.current.right) moveVector.add(right);
+    if (keys.current.up) moveVector.y += 1;
+    if (keys.current.down) moveVector.y -= 1;
+
+    if (moveVector.lengthSq() > 0) {
+      moveVector.normalize().multiplyScalar(moveSpeed);
+      camera.position.add(moveVector);
+    }
+  });
 
   const addRipple = () => {
     if (!input.trim() || !ghostRef.current) return;
-
     const pos = ghostRef.current.position;
     const rot = new THREE.Euler().setFromQuaternion(ghostRef.current.quaternion).toArray();
 
@@ -211,7 +166,7 @@ export default function Resonance3D() {
         <CameraRefSetter cameraRef={cameraRef} />
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
-        <OrbitControls />
+        <OrbitControls enablePan={false} enableZoom={false} />
         <PlusSignAxes size={5} thickness={0.2} />
         <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
@@ -227,7 +182,7 @@ export default function Resonance3D() {
         {input && <GhostText text={input} ref={ghostRef} />}
       </Canvas>
 
-      {/* Input UI bar */}
+      {/* Input UI */}
       <div
         style={{
           position: "fixed",
