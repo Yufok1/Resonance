@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { Text, PointerLockControls } from "@react-three/drei";
 import { database } from "./firebase";
 import {
@@ -12,7 +12,7 @@ import {
 } from "firebase/database";
 import * as THREE from "three";
 
-// Ripple component: text placed at fixed position and rotation
+// Placed ripple with fixed position/rotation
 function Ripple({ id, text, position, rotation, onDelete }) {
   const ref = useRef();
   const [opacity, setOpacity] = useState(1);
@@ -20,8 +20,8 @@ function Ripple({ id, text, position, rotation, onDelete }) {
 
   useFrame(({ camera }) => {
     if (ref.current) {
-      const dist = ref.current.position.distanceTo(camera.position);
-      setOpacity(Math.max(0, 1 - dist / 50));
+      const distance = ref.current.position.distanceTo(camera.position);
+      setOpacity(Math.max(0, 1 - distance / 50));
     }
   });
 
@@ -45,7 +45,7 @@ function Ripple({ id, text, position, rotation, onDelete }) {
   );
 }
 
-// Dot grid helper for spatial orientation
+// Dot field for spatial orientation
 function DotGrid({ size = 20, spacing = 2 }) {
   const dots = [];
   for (let x = -size; x <= size; x += spacing) {
@@ -67,7 +67,7 @@ function DotGrid({ size = 20, spacing = 2 }) {
   );
 }
 
-// 3D plus sign axes indicator
+// Custom 3D plus sign axis indicator
 function PlusSignAxes({ size = 5, thickness = 0.2 }) {
   return (
     <group>
@@ -90,10 +90,12 @@ function PlusSignAxes({ size = 5, thickness = 0.2 }) {
   );
 }
 
-// Controls component to handle camera movement and placing ripples
-function ControlsAndPlacer({ input, onAdd }) {
-  const { camera } = useThree();
-  const [keys, setKeys] = useState({
+export default function Resonance3D() {
+  const [ripples, setRipples] = useState([]);
+  const [input, setInput] = useState("");
+
+  // Keyboard movement state
+  const keys = useRef({
     forward: false,
     backward: false,
     left: false,
@@ -102,53 +104,58 @@ function ControlsAndPlacer({ input, onAdd }) {
     down: false,
   });
 
-  // Keyboard handlers
+  // Track camera pose in React state
+  const [cameraPose, setCameraPose] = useState({
+    position: new THREE.Vector3(0, 2, 10),
+    quaternion: new THREE.Quaternion(),
+  });
+
+  // Keyboard event listeners
   useEffect(() => {
     const down = (e) => {
       switch (e.code) {
         case "KeyW":
-          setKeys((k) => ({ ...k, forward: true }));
+          keys.current.forward = true;
           break;
         case "KeyS":
-          setKeys((k) => ({ ...k, backward: true }));
+          keys.current.backward = true;
           break;
         case "KeyA":
-          setKeys((k) => ({ ...k, left: true }));
+          keys.current.left = true;
           break;
         case "KeyD":
-          setKeys((k) => ({ ...k, right: true }));
+          keys.current.right = true;
           break;
         case "Space":
-          setKeys((k) => ({ ...k, up: true }));
+          keys.current.up = true;
           break;
         case "KeyC":
-          setKeys((k) => ({ ...k, down: true }));
+          keys.current.down = true;
           break;
       }
     };
     const up = (e) => {
       switch (e.code) {
         case "KeyW":
-          setKeys((k) => ({ ...k, forward: false }));
+          keys.current.forward = false;
           break;
         case "KeyS":
-          setKeys((k) => ({ ...k, backward: false }));
+          keys.current.backward = false;
           break;
         case "KeyA":
-          setKeys((k) => ({ ...k, left: false }));
+          keys.current.left = false;
           break;
         case "KeyD":
-          setKeys((k) => ({ ...k, right: false }));
+          keys.current.right = false;
           break;
         case "Space":
-          setKeys((k) => ({ ...k, up: false }));
+          keys.current.up = false;
           break;
         case "KeyC":
-          setKeys((k) => ({ ...k, down: false }));
+          keys.current.down = false;
           break;
       }
     };
-
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     return () => {
@@ -157,69 +164,19 @@ function ControlsAndPlacer({ input, onAdd }) {
     };
   }, []);
 
-  // Movement update
-  useFrame(() => {
-    const moveSpeed = 0.1;
-    const direction = new THREE.Vector3();
-    const right = new THREE.Vector3();
-
-    if (keys.forward) {
-      camera.getWorldDirection(direction);
-      direction.y = 0;
-      direction.normalize();
-      camera.position.addScaledVector(direction, moveSpeed);
-    }
-    if (keys.backward) {
-      camera.getWorldDirection(direction);
-      direction.y = 0;
-      direction.normalize();
-      camera.position.addScaledVector(direction, -moveSpeed);
-    }
-    if (keys.left) {
-      camera.getWorldDirection(direction);
-      direction.y = 0;
-      direction.normalize();
-      right.crossVectors(camera.up, direction).normalize();
-      camera.position.addScaledVector(right, moveSpeed);
-    }
-    if (keys.right) {
-      camera.getWorldDirection(direction);
-      direction.y = 0;
-      direction.normalize();
-      right.crossVectors(camera.up, direction).normalize();
-      camera.position.addScaledVector(right, -moveSpeed);
-    }
-    if (keys.up) {
-      camera.position.y += moveSpeed;
-    }
-    if (keys.down) {
-      camera.position.y -= moveSpeed;
-    }
-  });
-
-  // Handle add ripple when input changes (on enter or button press)
+  // Prevent context menu on right click
   useEffect(() => {
-    if (input.trim() !== "") {
-      // Calculate position 5 units ahead of camera
-      const dir = camera.getWorldDirection(new THREE.Vector3()).normalize();
-      const pos = camera.position.clone().add(dir.multiplyScalar(5));
-      const rot = [camera.rotation.x, camera.rotation.y, camera.rotation.z];
-      onAdd(pos.toArray(), rot);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [input]);
-
-  return null; // no UI here
-}
-
-export default function Resonance3D() {
-  const [ripples, setRipples] = useState([]);
-  const [input, setInput] = useState("");
-  const [adding, setAdding] = useState(false);
+    const handleContextMenu = (e) => e.preventDefault();
+    window.addEventListener("contextmenu", handleContextMenu);
+    return () => {
+      window.removeEventListener("contextmenu", handleContextMenu);
+    };
+  }, []);
 
   // Listen to Firebase ripples
   useEffect(() => {
     const ripplesRef = query(ref(database, "ripples"), limitToLast(100));
+
     const unsubscribe = onValue(ripplesRef, (snapshot) => {
       const data = snapshot.val() || {};
       const loaded = Object.entries(data).map(([id, val]) => ({
@@ -230,23 +187,77 @@ export default function Resonance3D() {
       }));
       setRipples(loaded);
     });
+
     return () => unsubscribe();
   }, []);
+  // Update camera pose state every frame
+  useFrame(({ camera }) => {
+    setCameraPose({
+      position: camera.position.clone(),
+      quaternion: camera.quaternion.clone(),
+    });
 
-  // Add ripple to Firebase
-  const addRipple = (position, rotation) => {
-    if (adding) return; // prevent spam
-    setAdding(true);
+    const moveSpeed = 0.1;
+    const direction = new THREE.Vector3();
+    const right = new THREE.Vector3();
+
+    // Forward/back
+    if (keys.current.forward) {
+      camera.getWorldDirection(direction);
+      direction.y = 0;
+      direction.normalize();
+      camera.position.addScaledVector(direction, moveSpeed);
+    }
+    if (keys.current.backward) {
+      camera.getWorldDirection(direction);
+      direction.y = 0;
+      direction.normalize();
+      camera.position.addScaledVector(direction, -moveSpeed);
+    }
+
+    // Left/right strafing
+    if (keys.current.left) {
+      camera.getWorldDirection(direction);
+      direction.y = 0;
+      direction.normalize();
+      right.crossVectors(camera.up, direction).normalize();
+      camera.position.addScaledVector(right, moveSpeed);
+    }
+    if (keys.current.right) {
+      camera.getWorldDirection(direction);
+      direction.y = 0;
+      direction.normalize();
+      right.crossVectors(camera.up, direction).normalize();
+      camera.position.addScaledVector(right, -moveSpeed);
+    }
+
+    // Up/down vertical movement
+    if (keys.current.up) {
+      camera.position.y += moveSpeed;
+    }
+    if (keys.current.down) {
+      camera.position.y -= moveSpeed;
+    }
+  });
+
+  const addRipple = () => {
+    if (!input.trim()) return;
+    const pos = [
+      cameraPose.position.x,
+      cameraPose.position.y,
+      cameraPose.position.z,
+    ];
+    const rot = new THREE.Euler()
+      .setFromQuaternion(cameraPose.quaternion)
+      .toArray();
     push(ref(database, "ripples"), {
       text: input,
-      position,
-      rotation,
+      position: pos,
+      rotation: rot,
     });
     setInput("");
-    setTimeout(() => setAdding(false), 500); // debounce
   };
 
-  // Delete ripple
   const deleteRipple = (id) => {
     remove(ref(database, `ripples/${id}`));
   };
@@ -263,7 +274,6 @@ export default function Resonance3D() {
         <PointerLockControls />
         <PlusSignAxes size={5} thickness={0.2} />
         <DotGrid size={20} spacing={2} />
-        <ControlsAndPlacer input={input} onAdd={addRipple} />
         {ripples.map(({ id, text, position, rotation }) => (
           <Ripple
             key={id}
@@ -296,16 +306,11 @@ export default function Resonance3D() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
-            if (e.key === "Enter" && input.trim()
-            if (e.key === "Enter" && input.trim() !== "") {
+            if (e.key === "Enter") {
               e.preventDefault();
-              // Trigger ripple placement by updating input state (handled by ControlsAndPlacer)
-              setInput(input);
+              addRipple();
             }
-            if (e.key === "Escape") {
-              e.preventDefault();
-              setInput("");
-            }
+            if (e.key === "Escape") setInput("");
           }}
           placeholder="Type your ripple..."
           style={{
@@ -318,11 +323,7 @@ export default function Resonance3D() {
           }}
         />
         <button
-          onClick={() => {
-            if (input.trim() !== "") {
-              setInput(input); // Trigger placement
-            }
-          }}
+          onClick={addRipple}
           style={{
             marginLeft: 10,
             padding: "6px 14px",
