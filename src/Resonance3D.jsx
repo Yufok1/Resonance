@@ -49,11 +49,18 @@ const GhostText = React.forwardRef(({ text }, ref) => {
   );
 });
 
-// Placed ripple with fixed position/rotation (no fade on opacity)
+// Placed ripple with fixed position/rotation
 function Ripple({ id, text, position, rotation, onDelete }) {
   const ref = useRef();
-  // Declare rotation Euler explicitly, fallback to zero rotation if none provided
+  const [opacity, setOpacity] = useState(1);
   const rotEuler = new THREE.Euler(...(rotation || [0, 0, 0]));
+
+  useFrame(({ camera }) => {
+    if (ref.current) {
+      const distance = ref.current.position.distanceTo(camera.position);
+      setOpacity(Math.max(0, 1 - distance / 50));
+    }
+  });
 
   return (
     <group position={position} rotation={rotEuler}>
@@ -67,7 +74,7 @@ function Ripple({ id, text, position, rotation, onDelete }) {
         lineHeight={1}
         onClick={() => onDelete(id)}
         style={{ cursor: "pointer" }}
-        fillOpacity={1} // fully opaque always
+        fillOpacity={opacity}
       >
         {text}
       </Text>
@@ -75,7 +82,7 @@ function Ripple({ id, text, position, rotation, onDelete }) {
   );
 }
 
-// Dot field for spatial orientation
+// Dot field for spatial orientation (unresponsive dots)
 function DotGrid({ size = 20, spacing = 2 }) {
   const dots = [];
   for (let x = -size; x <= size; x += spacing) {
@@ -88,12 +95,41 @@ function DotGrid({ size = 20, spacing = 2 }) {
   return (
     <>
       {dots.map((pos, i) => (
-        <mesh key={i} position={pos}>
+        <mesh
+          key={i}
+          position={pos}
+          castShadow={false}
+          receiveShadow={false}
+          raycast={() => {}} // disable raycast interaction
+        >
           <sphereGeometry args={[0.05, 8, 8]} />
           <meshBasicMaterial color="#555" opacity={0.15} transparent />
         </mesh>
       ))}
     </>
+  );
+}
+
+// Custom 3D plus sign axis indicator
+function PlusSignAxes({ size = 5, thickness = 0.2 }) {
+  return (
+    <group>
+      {/* X axis */}
+      <mesh position={[size / 2, 0, 0]}>
+        <boxGeometry args={[size, thickness, thickness]} />
+        <meshStandardMaterial color="red" />
+      </mesh>
+      {/* Y axis */}
+      <mesh position={[0, size / 2, 0]}>
+        <boxGeometry args={[thickness, size, thickness]} />
+        <meshStandardMaterial color="green" />
+      </mesh>
+      {/* Z axis */}
+      <mesh position={[0, 0, size / 2]}>
+        <boxGeometry args={[thickness, thickness, size]} />
+        <meshStandardMaterial color="blue" />
+      </mesh>
+    </group>
   );
 }
 
@@ -182,6 +218,7 @@ export default function Resonance3D() {
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
         <OrbitControls />
+        <PlusSignAxes size={5} thickness={0.2} />
         <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
           <Ripple
