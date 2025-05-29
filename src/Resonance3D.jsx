@@ -82,34 +82,6 @@ function Ripple({ id, text, position, rotation, onDelete }) {
   );
 }
 
-// Dot field for spatial orientation (unresponsive dots)
-function DotGrid({ size = 20, spacing = 2 }) {
-  const dots = [];
-  for (let x = -size; x <= size; x += spacing) {
-    for (let y = -size; y <= size; y += spacing) {
-      for (let z = -size; z <= size; z += spacing) {
-        dots.push([x, y, z]);
-      }
-    }
-  }
-  return (
-    <>
-      {dots.map((pos, i) => (
-        <mesh
-          key={i}
-          position={pos}
-          castShadow={false}
-          receiveShadow={false}
-          raycast={() => {}} // disable raycast interaction
-        >
-          <sphereGeometry args={[0.05, 8, 8]} />
-          <meshBasicMaterial color="#555" opacity={0.15} transparent />
-        </mesh>
-      ))}
-    </>
-  );
-}
-
 // Custom 3D plus sign axis indicator
 function PlusSignAxes({ size = 5, thickness = 0.2 }) {
   return (
@@ -219,7 +191,6 @@ export default function Resonance3D() {
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
         <OrbitControls />
         <PlusSignAxes size={5} thickness={0.2} />
-        <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
           <Ripple
             key={id}
