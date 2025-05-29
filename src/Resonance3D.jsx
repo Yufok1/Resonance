@@ -52,15 +52,10 @@ const GhostText = React.forwardRef(({ text }, ref) => {
 // Placed ripple with fixed position/rotation
 function Ripple({ id, text, position, rotation, onDelete }) {
   const ref = useRef();
-  const [opacity, setOpacity] = useState(1);
-  const rotEuler = new THREE.Euler(...(rotation || [0, 0, 0]));
+  const [opacity] = useState(1); // constant fully opaque, no fade
 
-  useFrame(({ camera }) => {
-    if (ref.current) {
-      const distance = ref.current.position.distanceTo(camera.position);
-      setOpacity(Math.max(0, 1 - distance / 50));
-    }
-  });
+// No need for useFrame here since opacity won't change
+
 
   return (
     <group position={position} rotation={rotEuler}>
