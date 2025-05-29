@@ -12,7 +12,7 @@ import {
 } from "firebase/database";
 import * as THREE from "three";
 
-// ... (GhostText, Ripple, DotGrid, PlusSignAxes components unchanged)
+// GhostText, Ripple, DotGrid, PlusSignAxes as before...
 
 function CameraRefSetter({ cameraRef }) {
   const { camera } = useThree();
@@ -29,60 +29,18 @@ export default function Resonance3D() {
   const cameraRef = useRef();
 
   // Keys state
-  const keys = useRef({
-    forward: false,
-    backward: false,
-    left: false,
-    right: false,
-    up: false,
-    down: false,
-  });
+  const keys = useRef({ forward: false, backward: false });
 
+  // Keyboard listeners
   useEffect(() => {
     const down = (e) => {
       if (e.target.tagName === "INPUT") return;
-      switch (e.code) {
-        case "KeyW":
-          keys.current.forward = true;
-          break;
-        case "KeyS":
-          keys.current.backward = true;
-          break;
-        case "KeyA":
-          keys.current.left = true;
-          break;
-        case "KeyD":
-          keys.current.right = true;
-          break;
-        case "Space":
-          keys.current.up = true;
-          break;
-        case "KeyC":
-          keys.current.down = true;
-          break;
-      }
+      if (e.code === "KeyW") keys.current.forward = true;
+      if (e.code === "KeyS") keys.current.backward = true;
     };
     const up = (e) => {
-      switch (e.code) {
-        case "KeyW":
-          keys.current.forward = false;
-          break;
-        case "KeyS":
-          keys.current.backward = false;
-          break;
-        case "KeyA":
-          keys.current.left = false;
-          break;
-        case "KeyD":
-          keys.current.right = false;
-          break;
-        case "Space":
-          keys.current.up = false;
-          break;
-        case "KeyC":
-          keys.current.down = false;
-          break;
-      }
+      if (e.code === "KeyW") keys.current.forward = false;
+      if (e.code === "KeyS") keys.current.backward = false;
     };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
@@ -92,7 +50,7 @@ export default function Resonance3D() {
     };
   }, []);
 
-  // Listen to Firebase ripples
+  // Listen to ripples from Firebase
   useEffect(() => {
     const ripplesRef = query(ref(database, "ripples"), limitToLast(100));
     const unsubscribe = onValue(ripplesRef, (snapshot) => {
@@ -108,38 +66,27 @@ export default function Resonance3D() {
     return () => unsubscribe();
   }, []);
 
+  // Move camera forward/back smoothly on W/S keys
   useFrame(() => {
     if (!cameraRef.current) return;
     const moveSpeed = 0.1;
     const camera = cameraRef.current;
+    const dir = new THREE.Vector3();
+    camera.getWorldDirection(dir);
+    dir.y = 0;
+    dir.normalize();
 
-    // Calculate directions
-    const forward = new THREE.Vector3();
-    camera.getWorldDirection(forward);
-    forward.y = 0;
-    forward.normalize();
-
-    const right = new THREE.Vector3();
-    right.crossVectors(camera.up, forward).normalize();
-
-    // Movement vector
-    const moveVector = new THREE.Vector3();
-
-    if (keys.current.forward) moveVector.add(forward);
-    if (keys.current.backward) moveVector.sub(forward);
-    if (keys.current.left) moveVector.sub(right);
-    if (keys.current.right) moveVector.add(right);
-    if (keys.current.up) moveVector.y += 1;
-    if (keys.current.down) moveVector.y -= 1;
-
-    if (moveVector.lengthSq() > 0) {
-      moveVector.normalize().multiplyScalar(moveSpeed);
-      camera.position.add(moveVector);
+    if (keys.current.forward) {
+      camera.position.addScaledVector(dir, moveSpeed);
+    }
+    if (keys.current.backward) {
+      camera.position.addScaledVector(dir, -moveSpeed);
     }
   });
 
   const addRipple = () => {
     if (!input.trim() || !ghostRef.current) return;
+
     const pos = ghostRef.current.position;
     const rot = new THREE.Euler().setFromQuaternion(ghostRef.current.quaternion).toArray();
 
@@ -182,7 +129,7 @@ export default function Resonance3D() {
         {input && <GhostText text={input} ref={ghostRef} />}
       </Canvas>
 
-      {/* Input UI */}
+      {/* Input UI bar */}
       <div
         style={{
           position: "fixed",
