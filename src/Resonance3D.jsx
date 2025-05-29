@@ -49,10 +49,12 @@ const GhostText = React.forwardRef(({ text }, ref) => {
   );
 });
 
-// Placed ripple with fixed position/rotation
+// Placed ripple with fixed position/rotation (no fade on opacity)
 function Ripple({ id, text, position, rotation, onDelete }) {
   const ref = useRef();
-  const [opacity] = useState(1); // constant fully opaque, no fade
+  // Declare rotation Euler explicitly, fallback to zero rotation if none provided
+  const rotEuler = new THREE.Euler(...(rotation || [0, 0, 0]));
+
   return (
     <group position={position} rotation={rotEuler}>
       <Text
@@ -65,7 +67,7 @@ function Ripple({ id, text, position, rotation, onDelete }) {
         lineHeight={1}
         onClick={() => onDelete(id)}
         style={{ cursor: "pointer" }}
-        fillOpacity={opacity}
+        fillOpacity={1} // fully opaque always
       >
         {text}
       </Text>
@@ -92,29 +94,6 @@ function DotGrid({ size = 20, spacing = 2 }) {
         </mesh>
       ))}
     </>
-  );
-}
-
-// Custom 3D plus sign axis indicator
-function PlusSignAxes({ size = 5, thickness = 0.2 }) {
-  return (
-    <group>
-      {/* X axis */}
-      <mesh position={[size / 2, 0, 0]}>
-        <boxGeometry args={[size, thickness, thickness]} />
-        <meshStandardMaterial color="red" />
-      </mesh>
-      {/* Y axis */}
-      <mesh position={[0, size / 2, 0]}>
-        <boxGeometry args={[thickness, size, thickness]} />
-        <meshStandardMaterial color="green" />
-      </mesh>
-      {/* Z axis */}
-      <mesh position={[0, 0, size / 2]}>
-        <boxGeometry args={[thickness, thickness, size]} />
-        <meshStandardMaterial color="blue" />
-      </mesh>
-    </group>
   );
 }
 
@@ -203,7 +182,6 @@ export default function Resonance3D() {
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
         <OrbitControls />
-        <PlusSignAxes size={5} thickness={0.2} />
         <DotGrid size={20} spacing={2} />
         {ripples.map(({ id, text, position, rotation }) => (
           <Ripple
